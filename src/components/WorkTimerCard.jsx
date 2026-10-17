@@ -1,0 +1,61 @@
+import { LogIn, LogOut, Timer, Coffee } from 'lucide-react'
+import { useCrm } from '../utils/CrmContext'
+import { fmtDuration, istTime, workedSeconds } from '../utils/helpers'
+import useNow from '../utils/useNow'
+
+const SHIFT_SEC = 8 * 3600
+
+export default function WorkTimerCard({ employee }) {
+  const { attendance, setAttendance } = useCrm()
+  const me = attendance.find((a) => a.employee === employee)
+  const running = !!me?.checkIn && !me?.checkOut
+  const now = useNow(running)
+  if (!me) return null
+
+  const done = !!me.checkOut
+  const secs = workedSeconds(me, now)
+  const pct = Math.min(100, (secs / SHIFT_SEC) * 100)
+  const update = (patch) => setAttendance((p) => p.map((a) => (a.id === me.id ? { ...a, ...patch } : a)))
+  const checkIn = () => update({ checkIn: istTime(), checkInAt: new Date().toISOString(), checkOut: '', checkOutAt: '', status: 'Present' })
+  const checkOut = () => update({ checkOut: istTime(), checkOutAt: new Date().toISOString() })
+
+  const state = running ? { label: 'Working', dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700' }
+    : done ? { label: 'Shift ended', dot: 'bg-slate-400', chip: 'bg-slate-100 text-slate-600' }
+      : { label: 'Not checked in', dot: 'bg-amber-500', chip: 'bg-amber-50 text-amber-700' }
+
+  return (
+    <div className="card relative mb-6 overflow-hidden !p-0">
+      <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-sun-400/30 to-orange-400/10 blur-2xl" />
+      <div className="relative grid gap-6 p-6 md:grid-cols-[1fr_auto] md:items-center">
+        <div>
+          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ${state.chip}`}>
+            <span className="relative flex h-2 w-2">
+              {running && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${state.dot}`} />}
+              <span className={`relative inline-flex h-2 w-2 rounded-full ${state.dot}`} />
+            </span>
+            {state.label}
+          </span>
+          <p className="mt-3 flex items-center gap-3 text-4xl font-extrabold tabular-nums tracking-tight text-slate-900 md:text-5xl">
+            <Timer size={32} className="text-brand-600" /> {fmtDuration(secs)}
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {me.checkIn ? <>Checked in at <b className="text-slate-700">{me.checkIn}</b>{done && <> · Checked out at <b className="text-slate-700">{me.checkOut}</b></>}</> : 'Start your day to begin tracking work hours'}
+          </p>
+          <div className="mt-4 max-w-md">
+            <div className="mb-1 flex justify-between text-[11px] font-semibold text-slate-400"><span>Shift progress</span><span>{pct.toFixed(0)}% of 8h</span></div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-sun-400 transition-all duration-1000" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-3 md:flex-col">
+          {running ? (
+            <button className="btn-primary flex-1 !bg-none !bg-rose-600 !shadow-rose-500/30 !py-3" onClick={checkOut}><LogOut size={18} /> Check-out</button>
+          ) : (
+            <button className="btn-primary flex-1 !py-3" disabled={done} onClick={checkIn}>{done ? <><Coffee size={18} /> Done for today</> : <><LogIn size={18} /> Check-in</>}</button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

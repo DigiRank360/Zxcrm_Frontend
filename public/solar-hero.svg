@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" fill="none">
+  <defs>
+    <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fde68a"/><stop offset=".6" stop-color="#fbbf24"/><stop offset="1" stop-color="#f97316"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fbbf24" stop-opacity=".45"/><stop offset="1" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="370" cy="85" r="110" fill="url(#glow)"/>
+  <g stroke="#fde68a" stroke-width="5" stroke-linecap="round" opacity=".9">
+    <path d="M370 18v14M370 138v14M303 85h-14M451 85h-14M323 38l-10-10M427 142l-10-10M417 38l10-10M313 142l10-10"/>
+  </g>
+  <circle cx="370" cy="85" r="42" fill="url(#sun)"/>
+  <path d="M0 290c80-30 160-30 240-10s160 20 240-10v50H0z" fill="#fff" fill-opacity=".08"/>
+  <g transform="translate(60 120)">
+    <path d="M30 0h250l40 130H-10z" fill="url(#panel)" stroke="#bfdbfe" stroke-width="3" stroke-linejoin="round"/>
+    <g stroke="#bfdbfe" stroke-opacity=".7" stroke-width="2">
+      <path d="M93 0l-17 130M156 0l-5 130M218 0l7 130M17 43h294M-1 87h312"/>
+    </g>
+    <path d="M30 0h120L100 130H-10z" fill="#fff" fill-opacity=".1"/>
+    <path d="M150 130v40M100 170h100" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round"/>
+  </g>
+</svg>
