@@ -3,30 +3,43 @@ import { CheckCircle2, MapPin, Phone, CalendarDays } from 'lucide-react'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
 import { useAuth } from '../utils/AuthContext'
-import { fmtDate, generateOtp } from '../utils/helpers'
+import { fmtDate } from '../utils/helpers'
+import { apiRequest } from '../utils/api'
 import PageHeader from '../components/PageHeader'
 import Badge from '../components/Badge'
 
 export default function Technician() {
-  const { maintenance, setMaintenance, installations } = useCrm()
-  const { user } = useAuth()
+  const { maintenance, setMaintenanceLocal, installations } = useCrm()
+  const { user, token } = useAuth()
   const workerId = user.id
   const [otps, setOtps] = useState({})
   const [input, setInput] = useState({})
   const [msg, setMsg] = useState({})
 
-  const jobs = maintenance.filter((m) => m.workerId === Number(workerId))
+  const jobs = maintenance.filter((m) => m.workerId === workerId)
 
-  const requestOtp = (id) => {
-    setOtps((p) => ({ ...p, [id]: generateOtp() }))
-    setMsg((p) => ({ ...p, [id]: 'OTP sent to customer\'s registered mobile' }))
+  const requestOtp = async (id) => {
+    try {
+      await apiRequest(`/api/maintenance/${id}/otp`, { method: 'POST', token })
+      setOtps((p) => ({ ...p, [id]: true }))
+      setMsg((p) => ({ ...p, [id]: 'OTP sent to customer\'s registered mobile' }))
+    } catch (error) {
+      setMsg((p) => ({ ...p, [id]: error.message }))
+    }
   }
 
-  const verify = (id) => {
-    if (input[id] === otps[id]) {
-      setMaintenance((p) => p.map((m) => (m.id === id ? { ...m, status: 'Completed' } : m)))
+  const verify = async (id) => {
+    try {
+      await apiRequest(`/api/maintenance/${id}/verify-otp`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ otp: input[id] || '' }),
+      })
+      setMaintenanceLocal((p) => p.map((m) => (m.id === id ? { ...m, status: 'Completed' } : m)))
       setMsg((p) => ({ ...p, [id]: 'Verified. Admin notified.' }))
-    } else setMsg((p) => ({ ...p, [id]: 'Invalid OTP' }))
+    } catch (error) {
+      setMsg((p) => ({ ...p, [id]: error.message }))
+    }
   }
 
   return (
@@ -63,7 +76,6 @@ export default function Technician() {
                 <p className="mt-4 flex items-center gap-1 text-sm font-semibold text-green-700"><CheckCircle2 size={16} /> Service completed</p>
               )}
               {msg[m.id] && <p className="mt-2 text-xs text-slate-500">{msg[m.id]}</p>}
-              {otps[m.id] && m.status === 'Pending' && <p className="mt-1 text-xs text-amber-600">Demo OTP (would be SMS): {otps[m.id]}</p>}
             </div>
           )
         })}

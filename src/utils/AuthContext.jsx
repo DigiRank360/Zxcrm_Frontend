@@ -1,34 +1,45 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState } from 'react'
-import { agents, workers } from '../data/mockData'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { apiRequest } from './api'
 
 const AuthContext = createContext(null)
 
 export const ROLES = { admin: 'Admin', employee: 'Employee', technician: 'Technician' }
 
-const creds = {
-  admin: { 0: ['admin', 'Admin@123'] },
-  employee: { 1: ['rahul', 'Rahul@123'], 2: ['priya', 'Priya@123'], 3: ['amit', 'Amit@123'], 4: ['neha', 'Neha@123'] },
-  technician: { 11: ['suresh', 'Suresh@123'], 12: ['mohit', 'Mohit@123'] },
-}
-
-export const accounts = [
-  { id: 0, name: 'Admin', role: 'admin' },
-  ...agents.map((a) => ({ id: a.id, name: a.name, role: 'employee' })),
-  ...workers.map((w) => ({ id: w.id, name: w.name, role: 'technician' })),
-].map((u) => ({ ...u, username: creds[u.role][u.id][0], password: creds[u.role][u.id][1] }))
-
-export function authenticate(username, password) {
-  const acc = accounts.find((a) => a.username === username.trim().toLowerCase() && a.password === password)
-  if (!acc) return null
-  return { id: acc.id, name: acc.name, role: acc.role }
-}
-
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('crm_user') || 'null'))
-  const login = (u) => { localStorage.setItem('crm_user', JSON.stringify(u)); setUser(u) }
-  const logout = () => { localStorage.removeItem('crm_user'); setUser(null) }
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>
+  const [user, setUser] = useState(() => {
+    if (!localStorage.getItem('crm_token')) return null
+    try { return JSON.parse(localStorage.getItem('crm_user') || 'null') } catch { return null }
+  })
+  const [token, setToken] = useState(() => localStorage.getItem('crm_token') || '')
+
+  useEffect(() => {
+    if (!token) return
+    apiRequest('/api/auth/me', { token }).catch(() => {
+      localStorage.removeItem('crm_user')
+      localStorage.removeItem('crm_token')
+      setUser(null)
+      setToken('')
+    })
+  }, [token])
+
+  const login = async (username, password) => {
+    const result = await apiRequest('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    })
+    localStorage.setItem('crm_user', JSON.stringify(result.user))
+    localStorage.setItem('crm_token', result.token)
+    setUser(result.user)
+    setToken(result.token)
+  }
+  const logout = () => {
+    localStorage.removeItem('crm_user')
+    localStorage.removeItem('crm_token')
+    setUser(null)
+    setToken('')
+  }
+  return <AuthContext.Provider value={{ user, token, login, logout }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => useContext(AuthContext)

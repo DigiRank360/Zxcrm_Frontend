@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
 import { useAuth } from '../utils/AuthContext'
-import { CALL_OUTCOMES } from '../data/mockData'
-import { fmtDateTime } from '../utils/helpers'
+import { CALL_OUTCOMES } from '../data/crmOptions'
+import { fmtDateTime, istDate } from '../utils/helpers'
 import PageHeader from '../components/PageHeader'
 import Badge from '../components/Badge'
 
@@ -13,10 +13,10 @@ export default function AgentCalling() {
   const { leads, setLeads, attendance } = useCrm()
   const { user } = useAuth()
   const agentId = user.id
-  const att = attendance.find((a) => a.employee === user.name)
+  const att = attendance.find((a) => a.date === istDate() && (a.userId ? a.userId === user.id : a.employee === user.name))
   const working = !!att?.checkIn && !att?.checkOut
   const [draft, setDraft] = useState({})
-  const queue = leads.filter((l) => l.agentId === Number(agentId) && l.status !== 'Converted')
+  const queue = leads.filter((l) => l.agentId === agentId && l.status !== 'Converted')
 
   const save = (id) => {
     const d = draft[id] || {}

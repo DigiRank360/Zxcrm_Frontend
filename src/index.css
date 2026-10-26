@@ -8,7 +8,76 @@
   :focus-visible { @apply outline-none ring-2 ring-brand-500/60 ring-offset-1; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { @apply rounded-full bg-slate-300; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
 }
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  color: #e2e8f0;
+  background: radial-gradient(900px 420px at 100% -10%, rgba(251,191,36,.07), transparent 60%), radial-gradient(800px 500px at 0% 0%, rgba(59,109,240,.12), transparent 60%), #0f172a;
+}
+
+html.dark .card {
+  border-color: rgba(71, 85, 105, .65);
+  background-color: rgba(30, 41, 59, .92);
+  --tw-ring-color: rgba(148, 163, 184, .12);
+}
+
+html.dark .bg-white,
+html.dark .bg-white\/80,
+html.dark .bg-white\/90 {
+  background-color: #1e293b;
+}
+
+html.dark .bg-slate-50 { background-color: #263449; }
+html.dark .bg-slate-100 { background-color: #334155; }
+html.dark .bg-brand-50 { background-color: rgba(59, 109, 240, .16); }
+html.dark .bg-amber-50 { background-color: rgba(245, 158, 11, .12); }
+html.dark .bg-rose-50 { background-color: rgba(244, 63, 94, .12); }
+html.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, .12); }
+
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 { color: #e2e8f0; }
+html.dark .text-slate-600 { color: #cbd5e1; }
+html.dark .text-slate-500 { color: #94a3b8; }
+html.dark .text-slate-400 { color: #94a3b8; }
+html.dark .text-brand-700 { color: #93b4ff; }
+html.dark .text-brand-800 { color: #bcd2ff; }
+html.dark .text-amber-800 { color: #fcd34d; }
+html.dark .text-rose-700,
+html.dark .text-rose-600 { color: #fda4af; }
+html.dark .text-emerald-700 { color: #6ee7b7; }
+html.dark .text-green-700 { color: #6ee7b7; }
+
+html.dark .border-slate-200,
+html.dark .border-slate-300,
+html.dark .border-slate-200\/60 { border-color: #475569; }
+html.dark .border-amber-200 { border-color: rgba(245, 158, 11, .35); }
+html.dark .border-rose-200 { border-color: rgba(244, 63, 94, .35); }
+html.dark .border-emerald-200 { border-color: rgba(16, 185, 129, .35); }
+
+html.dark .input,
+html.dark select.input {
+  border-color: #475569;
+  background-color: #1e293b;
+  color: #e2e8f0;
+}
+
+html.dark .input::placeholder { color: #94a3b8; }
+html.dark input[type='date'],
+html.dark input[type='datetime-local'] { color-scheme: dark; }
+html.dark .btn-outline {
+  border-color: #475569;
+  background-color: #1e293b;
+  color: #cbd5e1;
+}
+html.dark .btn-outline:hover { background-color: #263449; }
+html.dark header { border-color: #334155; background-color: rgba(15, 23, 42, .88); }
 
 @layer components {
   .card { @apply rounded-2xl border border-white/80 bg-white/90 p-5 shadow-soft ring-1 ring-slate-900/5 backdrop-blur transition duration-200; }

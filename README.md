@@ -1,16 +1,30 @@
-# React + Vite
+# ZX Solar CRM
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Run locally
 
-Currently, two official plugins are available:
+Start the API in one terminal:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```sh
+cd Crm_Backend
+npm install
+npm run dev
+```
 
-## React Compiler
+Start the frontend in another terminal:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```sh
+cd Crm_Frontend
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+Vite proxies `/api` requests to `http://localhost:3001`. Set the API's `PORT` environment variable to use another port and update the proxy in `vite.config.js` to match.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Set the MongoDB connection string and first administrator credentials in `Crm_Backend/.env` as described in [the backend README](../Crm_Backend/README.md). MongoDB stores CRM records and accounts; the administrator creates employee and technician logins in **Team accounts**. Configure Meta/WhatsApp webhook and Twilio SMS credentials in the backend environment to enable integrations. The theme button switches between light and dark themes and remembers the choice in the browser.
+
+## Checks
+
+```sh
+npm run lint
+npm run build
+```

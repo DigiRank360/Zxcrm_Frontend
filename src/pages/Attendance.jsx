@@ -4,7 +4,7 @@ import useNow from '../utils/useNow'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
 import { useAuth } from '../utils/AuthContext'
-import { fmtDuration, workedSeconds } from '../utils/helpers'
+import { fmtDuration, istDate, workedSeconds } from '../utils/helpers'
 import PageHeader from '../components/PageHeader'
 import DataTable from '../components/DataTable'
 import Badge from '../components/Badge'
@@ -16,8 +16,9 @@ export default function Attendance() {
   const { user } = useAuth()
   const isAdmin = user.role === 'admin'
   const now = useNow()
-  const rows = isAdmin ? attendance : attendance.filter((a) => a.employee === user.name)
-  const total = rows.reduce((s, a) => s + workedSeconds(a, now) / 3600, 0)
+  const rows = isAdmin ? attendance : attendance.filter((row) => row.userId ? row.userId === user.id : row.employee === user.name)
+  const todayRows = rows.filter((row) => row.date === istDate())
+  const total = todayRows.reduce((s, a) => s + workedSeconds(a, now) / 3600, 0)
 
   const columns = [
     { key: 'employee', label: 'Employee', render: (r) => <Person name={r.employee} /> },
@@ -31,11 +32,11 @@ export default function Attendance() {
   return (
     <>
       <PageHeader eyebrow="Employee" title="Attendance" subtitle={isAdmin ? 'All employees' : `Signed in as ${user.name}`} />
-      {!isAdmin && <WorkTimerCard employee={user.name} />}
+      {!isAdmin && <WorkTimerCard employee={user.name} userId={user.id} />}
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <StatCard label="Total hours today" value={total.toFixed(1)} icon={Clock} />
-        <StatCard label="Present / On-field" value={rows.filter((r) => ['Present', 'On-field'].includes(r.status)).length} icon={UserCheck} tone="green" />
-        <StatCard label="Avg hours" value={(rows.length ? total / rows.length : 0).toFixed(1)} icon={Timer} tone="amber" />
+        <StatCard label="Present / On-field" value={todayRows.filter((r) => ['Present', 'On-field'].includes(r.status)).length} icon={UserCheck} tone="green" />
+        <StatCard label="Avg hours" value={(todayRows.length ? total / todayRows.length : 0).toFixed(1)} icon={Timer} tone="amber" />
       </div>
       <DataTable columns={columns} rows={rows} />
     </>

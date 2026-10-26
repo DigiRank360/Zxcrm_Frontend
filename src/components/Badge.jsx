@@ -11,6 +11,7 @@ const colors = {
   'On-field': 'bg-indigo-50 text-indigo-700 ring-indigo-200',
   Pending: 'bg-amber-50 text-amber-700 ring-amber-200',
   Completed: 'bg-green-50 text-green-700 ring-green-200',
+  'In Progress': 'bg-brand-50 text-brand-700 ring-brand-200',
   Active: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   Inactive: 'bg-rose-50 text-rose-700 ring-rose-200',
 }

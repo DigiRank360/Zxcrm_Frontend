@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { LayoutDashboard, Clock, Users, Shuffle, PhoneCall, Sun, Wrench, ShieldCheck, Inbox, LogOut, CalendarDays } from 'lucide-react'
+import { LayoutDashboard, Clock, Users, Shuffle, PhoneCall, Sun, Moon, Wrench, ShieldCheck, Inbox, LogOut, CalendarDays, UserCog } from 'lucide-react'
 import { useAuth, ROLES } from '../utils/AuthContext'
+import { useCrm } from '../utils/CrmContext'
 
 const linksByRole = {
   admin: [
@@ -12,6 +13,7 @@ const linksByRole = {
     { to: '/assignment', label: 'Lead Assignment', icon: Shuffle },
     { to: '/installations', label: 'Solar Installations', icon: Sun },
     { to: '/maintenance', label: 'Maintenance (AMC)', icon: Wrench },
+    { to: '/team', label: 'Team accounts', icon: UserCog },
   ],
   employee: [
     { to: '/', label: 'My Dashboard', icon: LayoutDashboard },
@@ -35,12 +37,18 @@ const initials = (n) => n.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpp
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const { error, loading } = useCrm()
   const links = linksByRole[user.role]
   const [now, setNow] = useState(() => new Date())
+  const [dark, setDark] = useState(() => localStorage.getItem('crm_theme') === 'dark')
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('crm_theme', dark ? 'dark' : 'light')
+  }, [dark])
 
   return (
     <div className="flex min-h-screen">
@@ -87,14 +95,23 @@ export default function Layout() {
             <p className="truncate text-sm font-bold text-slate-900">{greeting(now)}, {user.name.split(' ')[0]}</p>
             <p className="hidden items-center gap-1.5 text-xs text-slate-500 sm:flex"><CalendarDays size={12} /> {fmt(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setDark((value) => !value)}
+              aria-label={`Switch to ${dark ? 'light' : 'dark'} theme`}
+              title={`Switch to ${dark ? 'light' : 'dark'} theme`}
+              className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            >
+              {dark ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+            <div className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm sm:gap-2.5 sm:px-3">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               </span>
-              <Clock size={14} className="text-brand-600" />
-              <span className="text-sm font-bold tabular-nums text-slate-800">{fmt(now, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
+              <Clock size={14} className="shrink-0 text-brand-600" />
+              <span className="whitespace-nowrap text-xs font-bold tabular-nums text-slate-800 sm:text-sm">{fmt(now, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
               <span className="hidden rounded-md bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-brand-700 sm:inline">IST</span>
             </div>
             <div className="hidden items-center gap-2 border-l border-slate-200 pl-3 sm:flex">
@@ -107,14 +124,17 @@ export default function Layout() {
             <button onClick={logout} title="Logout" className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600 md:hidden"><LogOut size={16} /></button>
           </div>
         </header>
-        <nav className="flex gap-2 overflow-x-auto bg-brand-900 p-2 text-xs text-white md:hidden">
+        <nav className="hide-scrollbar flex gap-2 overflow-x-auto bg-brand-900 p-2 text-xs text-white md:hidden">
           {links.map(({ to, label }) => (
             <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `whitespace-nowrap rounded-lg px-3 py-1.5 ${isActive ? 'bg-white text-brand-800' : ''}`}>
               {label}
             </NavLink>
           ))}
         </nav>
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 md:p-8"><Outlet /></main>
+        <main className="mx-auto w-full max-w-7xl flex-1 p-4 md:p-8">
+          {error && <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>}
+          {loading ? <div className="card text-sm text-slate-500">Loading your CRM data…</div> : <Outlet />}
+        </main>
       </div>
     </div>
   )

@@ -4,7 +4,7 @@ import useNow from '../utils/useNow'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../utils/AuthContext'
 import { useCrm } from '../utils/CrmContext'
-import { fmtDateTime, workedSeconds } from '../utils/helpers'
+import { fmtDateTime, istDate, workedSeconds } from '../utils/helpers'
 import { Person } from '../components/Avatar'
 import PageHeader from '../components/PageHeader'
 import StatCard from '../components/StatCard'
@@ -17,12 +17,12 @@ export default function EmployeeDashboard() {
   const mine = leads.filter((l) => l.agentId === user.id)
   const open = mine.filter((l) => l.status !== 'Converted')
   const followUps = open.filter((l) => l.followUp).sort((a, b) => a.followUp.localeCompare(b.followUp))
-  const today = attendance.find((a) => a.employee === user.name)
+  const today = attendance.find((a) => a.date === istDate() && (a.userId ? a.userId === user.id : a.employee === user.name))
 
   return (
     <>
       <PageHeader eyebrow="Employee" title={`Welcome, ${user.name}`} subtitle="Your day at a glance" />
-      <WorkTimerCard employee={user.name} />
+      <WorkTimerCard employee={user.name} userId={user.id} />
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="My Leads" value={mine.length} icon={Users} />
         <StatCard label="Pending Calls" value={open.filter((l) => l.status === 'New' || l.status === 'Not Picked' || l.status === 'Busy').length} icon={PhoneCall} tone="amber" />

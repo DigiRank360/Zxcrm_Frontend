@@ -1,22 +1,33 @@
 import { LogIn, LogOut, Timer, Coffee } from 'lucide-react'
 import { useCrm } from '../utils/CrmContext'
-import { fmtDuration, istTime, workedSeconds } from '../utils/helpers'
+import { fmtDuration, istDate, istTime, workedSeconds } from '../utils/helpers'
 import useNow from '../utils/useNow'
 
 const SHIFT_SEC = 8 * 3600
 
-export default function WorkTimerCard({ employee }) {
+export default function WorkTimerCard({ employee, userId }) {
   const { attendance, setAttendance } = useCrm()
-  const me = attendance.find((a) => a.employee === employee)
+  const me = attendance.find((a) => (a.userId ? a.userId === userId : a.employee === employee) && a.date === istDate())
   const running = !!me?.checkIn && !me?.checkOut
   const now = useNow(running)
-  if (!me) return null
-
-  const done = !!me.checkOut
+  const done = !!me?.checkOut
   const secs = workedSeconds(me, now)
   const pct = Math.min(100, (secs / SHIFT_SEC) * 100)
-  const update = (patch) => setAttendance((p) => p.map((a) => (a.id === me.id ? { ...a, ...patch } : a)))
-  const checkIn = () => update({ checkIn: istTime(), checkInAt: new Date().toISOString(), checkOut: '', checkOutAt: '', status: 'Present' })
+  const update = (patch) => setAttendance((p) => p.map((a) => (a.id === me?.id ? { ...a, ...patch } : a)))
+  const checkIn = () => {
+    if (me) return update({ checkIn: istTime(), checkInAt: new Date().toISOString(), checkOut: '', checkOutAt: '', status: 'Present' })
+    setAttendance((p) => [...p, {
+      id: crypto.randomUUID(),
+      userId,
+      employee,
+      date: istDate(),
+      checkIn: istTime(),
+      checkInAt: new Date().toISOString(),
+      checkOut: '',
+      checkOutAt: '',
+      status: 'Present',
+    }])
+  }
   const checkOut = () => update({ checkOut: istTime(), checkOutAt: new Date().toISOString() })
 
   const state = running ? { label: 'Working', dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700' }
@@ -39,7 +50,7 @@ export default function WorkTimerCard({ employee }) {
             <Timer size={32} className="text-brand-600" /> {fmtDuration(secs)}
           </p>
           <p className="mt-1 text-sm text-slate-500">
-            {me.checkIn ? <>Checked in at <b className="text-slate-700">{me.checkIn}</b>{done && <> · Checked out at <b className="text-slate-700">{me.checkOut}</b></>}</> : 'Start your day to begin tracking work hours'}
+            {me?.checkIn ? <>Checked in at <b className="text-slate-700">{me.checkIn}</b>{done && <> · Checked out at <b className="text-slate-700">{me.checkOut}</b></>}</> : 'Start your day to begin tracking work hours'}
           </p>
           <div className="mt-4 max-w-md">
             <div className="mb-1 flex justify-between text-[11px] font-semibold text-slate-400"><span>Shift progress</span><span>{pct.toFixed(0)}% of 8h</span></div>

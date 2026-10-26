@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Upload, Search } from 'lucide-react'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
-import { LEAD_SOURCES, LEAD_STATUSES } from '../data/mockData'
+import { LEAD_SOURCES, LEAD_STATUSES } from '../data/crmOptions'
 import { fmtDate, parseCsv } from '../utils/helpers'
 import SourceIcon from '../components/SourceIcon'
 import PageHeader from '../components/PageHeader'
@@ -29,7 +29,14 @@ export default function Leads() {
     const file = input.files[0]
     if (file) {
       const imported = parseCsv(await file.text())
-      setLeads((p) => [...p, ...imported])
+      setLeads((p) => {
+        const activeAgents = agents.filter((agent) => agent.active !== false)
+        let index = 0
+        return [...p, ...imported.map((lead) => ({
+          ...lead,
+          agentId: activeAgents.length ? activeAgents[index++ % activeAgents.length].id : null,
+        }))]
+      })
     }
     input.value = ''
   }

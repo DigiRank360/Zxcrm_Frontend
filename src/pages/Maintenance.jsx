@@ -12,7 +12,7 @@ export default function Maintenance() {
   const rows = [...maintenance].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 
   const assign = (id, workerId) =>
-    setMaintenance((p) => p.map((m) => (m.id === id ? { ...m, workerId: Number(workerId) } : m)))
+    setMaintenance((p) => p.map((m) => (m.id === id ? { ...m, workerId: workerId || null } : m)))
 
   const columns = [
     { key: 'customer', label: 'Customer', render: (r) => { const i = installations.find((x) => x.id === r.installationId); return <Person name={i?.customer || '?'} sub={i?.address} /> } },

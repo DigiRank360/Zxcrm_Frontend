@@ -24,22 +24,13 @@ export const generateQuarterlySchedule = (installDate, count = 4) => {
 export const daysUntil = (date) =>
   Math.ceil((new Date(date) - new Date()) / 86400000)
 
-export const roundRobinAssign = (leads, agents) => {
-  const active = agents.filter((a) => a.active)
-  if (!active.length) return leads
-  let i = 0
-  return leads.map((l) => (l.agentId ? l : { ...l, agentId: active[i++ % active.length].id }))
-}
-
-export const generateOtp = () => String(Math.floor(1000 + Math.random() * 9000))
-
 export const parseCsv = (text) => {
   const [head, ...rows] = text.trim().split(/\r?\n/)
   const keys = head.split(',').map((k) => k.trim().toLowerCase())
-  return rows.map((r, i) => {
+  return rows.map((r) => {
     const v = r.split(',').map((x) => x.trim())
     const o = Object.fromEntries(keys.map((k, j) => [k, v[j]]))
-    return { id: Date.now() + i, name: o.name, phone: o.phone, source: 'CSV', status: 'New', agentId: null, date: new Date().toISOString().slice(0, 10), followUp: '' }
+    return { id: crypto.randomUUID(), name: o.name, phone: o.phone, source: 'CSV', status: 'New', agentId: null, date: new Date().toISOString().slice(0, 10), followUp: '' }
   })
 }
 
