@@ -4,7 +4,7 @@ import { apiRequest } from './api'
 
 const AuthContext = createContext(null)
 
-export const ROLES = { admin: 'Admin', employee: 'Employee', technician: 'Technician' }
+export const ROLES = { admin: 'Admin', hr: 'HR', employee: 'Employee', technician: 'Technician' }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {

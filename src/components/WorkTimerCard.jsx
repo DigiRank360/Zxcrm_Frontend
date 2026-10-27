@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { LogIn, LogOut, Timer, Coffee } from 'lucide-react'
 import { useCrm } from '../utils/CrmContext'
 import { fmtDuration, istDate, istTime, workedSeconds } from '../utils/helpers'
@@ -6,7 +7,10 @@ import useNow from '../utils/useNow'
 const SHIFT_SEC = 8 * 3600
 
 export default function WorkTimerCard({ employee, userId }) {
-  const { attendance, setAttendance } = useCrm()
+  const { attendance, setAttendance, uploadPhoto } = useCrm()
+  const [photo, setPhoto] = useState(null)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
   const me = attendance.find((a) => (a.userId ? a.userId === userId : a.employee === employee) && a.date === istDate())
   const running = !!me?.checkIn && !me?.checkOut
   const now = useNow(running)
@@ -14,19 +18,30 @@ export default function WorkTimerCard({ employee, userId }) {
   const secs = workedSeconds(me, now)
   const pct = Math.min(100, (secs / SHIFT_SEC) * 100)
   const update = (patch) => setAttendance((p) => p.map((a) => (a.id === me?.id ? { ...a, ...patch } : a)))
-  const checkIn = () => {
-    if (me) return update({ checkIn: istTime(), checkInAt: new Date().toISOString(), checkOut: '', checkOutAt: '', status: 'Present' })
-    setAttendance((p) => [...p, {
-      id: crypto.randomUUID(),
-      userId,
-      employee,
-      date: istDate(),
-      checkIn: istTime(),
-      checkInAt: new Date().toISOString(),
-      checkOut: '',
-      checkOutAt: '',
-      status: 'Present',
-    }])
+  const checkIn = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const photoUrl = photo ? await uploadPhoto(photo, 'attendance') : undefined
+      if (me) update({ checkIn: istTime(), checkInAt: new Date().toISOString(), checkOut: '', checkOutAt: '', status: 'Present', ...(photoUrl ? { photoUrl } : {}) })
+      else setAttendance((p) => [...p, {
+        id: crypto.randomUUID(),
+        userId,
+        employee,
+        date: istDate(),
+        checkIn: istTime(),
+        checkInAt: new Date().toISOString(),
+        checkOut: '',
+        checkOutAt: '',
+        status: 'Present',
+        ...(photoUrl ? { photoUrl } : {}),
+      }])
+      setPhoto(null)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSaving(false)
+    }
   }
   const checkOut = () => update({ checkOut: istTime(), checkOutAt: new Date().toISOString() })
 
@@ -57,13 +72,21 @@ export default function WorkTimerCard({ employee, userId }) {
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-sun-400 transition-all duration-1000" style={{ width: `${pct}%` }} />
             </div>
+            {!me?.checkIn && (
+              <label className="mt-4 block max-w-md text-xs font-semibold text-slate-600">
+                Optional check-in photo (JPEG, PNG, or WebP; up to 5 MB)
+                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="input mt-1" onChange={(event) => setPhoto(event.target.files?.[0] || null)} />
+              </label>
+            )}
+            {me?.photoUrl && <a className="mt-2 inline-block text-xs font-semibold text-brand-700 underline" href={me.photoUrl} target="_blank" rel="noreferrer">View check-in photo</a>}
+            {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
           </div>
         </div>
         <div className="flex gap-3 md:flex-col">
           {running ? (
             <button className="btn-primary flex-1 !bg-none !bg-rose-600 !shadow-rose-500/30 !py-3" onClick={checkOut}><LogOut size={18} /> Check-out</button>
           ) : (
-            <button className="btn-primary flex-1 !py-3" disabled={done} onClick={checkIn}>{done ? <><Coffee size={18} /> Done for today</> : <><LogIn size={18} /> Check-in</>}</button>
+            <button className="btn-primary flex-1 !py-3" disabled={done || saving} onClick={checkIn}>{done ? <><Coffee size={18} /> Done for today</> : <><LogIn size={18} /> {saving ? 'Checking in…' : 'Check-in'}</>}</button>
           )}
         </div>
       </div>

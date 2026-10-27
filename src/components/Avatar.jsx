@@ -19,7 +19,7 @@ export default function Avatar({ name = '?', size = 'h-9 w-9', className = '' })
 
 export function Person({ name, sub }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex min-w-0 items-center gap-3">
       <Avatar name={name} />
       <div className="min-w-0 leading-tight">
         <p className="truncate text-sm font-semibold text-slate-900">{name}</p>

@@ -16,6 +16,12 @@ html.dark {
   color-scheme: dark;
 }
 
+html.dark .logo-light { display: none; }
+html.dark .logo-dark { display: block !important; }
+html.dark .hover\:bg-slate-100:hover { background-color: #334155; }
+html.dark .ring-brand-100 { --tw-ring-color: rgba(59, 109, 240, .35); }
+html.dark h1.bg-clip-text { background-image: linear-gradient(90deg, #dbe7ff, #93b4ff); }
+
 html.dark body {
   color: #e2e8f0;
   background: radial-gradient(900px 420px at 100% -10%, rgba(251,191,36,.07), transparent 60%), radial-gradient(800px 500px at 0% 0%, rgba(59,109,240,.12), transparent 60%), #0f172a;
@@ -80,13 +86,13 @@ html.dark .btn-outline:hover { background-color: #263449; }
 html.dark header { border-color: #334155; background-color: rgba(15, 23, 42, .88); }
 
 @layer components {
-  .card { @apply rounded-2xl border border-white/80 bg-white/90 p-5 shadow-soft ring-1 ring-slate-900/5 backdrop-blur transition duration-200; }
+  .card { @apply rounded-2xl border border-white/80 bg-white/90 p-4 shadow-soft sm:p-5 ring-1 ring-slate-900/5 backdrop-blur transition duration-200; }
   .card-hover { @apply hover:-translate-y-1 hover:shadow-lift; }
   .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50; }
   .btn-primary { @apply btn bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-md shadow-brand-500/30 hover:shadow-lg hover:shadow-brand-500/40 hover:brightness-110; }
   .btn-outline { @apply btn border border-slate-200 bg-white text-slate-700 hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700; }
   .input { @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-100; }
-  .th { @apply px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500; }
-  .td { @apply px-5 py-3.5 text-sm text-slate-700; }
+  .th { @apply whitespace-nowrap px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 sm:px-5; }
+  .td { @apply px-4 py-3 text-sm text-slate-700 sm:px-5 sm:py-3.5; }
   .section-title { @apply mb-4 text-base font-bold text-slate-900; }
 }

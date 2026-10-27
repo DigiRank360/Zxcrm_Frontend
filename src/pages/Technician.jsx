@@ -9,7 +9,7 @@ import PageHeader from '../components/PageHeader'
 import Badge from '../components/Badge'
 
 export default function Technician() {
-  const { maintenance, setMaintenanceLocal, installations } = useCrm()
+  const { maintenance, setMaintenanceLocal, installations, customers } = useCrm()
   const { user, token } = useAuth()
   const workerId = user.id
   const [otps, setOtps] = useState({})
@@ -49,14 +49,17 @@ export default function Technician() {
       <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
         {jobs.map((m) => {
           const inst = installations.find((i) => i.id === m.installationId)
+          const customer = customers.find((item) => item.id === m.customerId)
           return (
             <div key={m.id} className="card card-hover">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <Person name={inst?.customer || '?'} />
+                  <Person name={customer?.name || inst?.customer || '?'} />
                   <div className="mt-3 space-y-1 text-sm text-slate-500">
-                    <p className="flex items-center gap-2"><MapPin size={14} className="text-slate-400" /> {inst?.address}</p>
-                    <p className="flex items-center gap-2"><Phone size={14} className="text-slate-400" /> {inst?.phone}</p>
+                    <p className="font-semibold text-slate-700">{m.title || 'Service job'}{m.priority ? ` · ${m.priority}` : ''}</p>
+                    {m.description && <p>{m.description}</p>}
+                    <p className="flex items-center gap-2"><MapPin size={14} className="text-slate-400" /> {inst?.address || customer?.address || 'No address recorded'}</p>
+                    <p className="flex items-center gap-2"><Phone size={14} className="text-slate-400" /> {customer?.phone || inst?.phone}</p>
                     <p className="flex items-center gap-2"><CalendarDays size={14} className="text-slate-400" /> Due {fmtDate(m.dueDate)}</p>
                   </div>
                 </div>

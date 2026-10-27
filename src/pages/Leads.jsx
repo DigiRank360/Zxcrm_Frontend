@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Upload, Search } from 'lucide-react'
+import { Upload, Search, RefreshCw } from 'lucide-react'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
 import { LEAD_SOURCES, LEAD_STATUSES } from '../data/crmOptions'
@@ -11,11 +11,47 @@ import DataTable from '../components/DataTable'
 import Badge from '../components/Badge'
 
 export default function Leads() {
-  const { leads, setLeads, agents } = useCrm()
+  const { leads, agents, importLeads, refreshLeads } = useCrm()
   const [params] = useSearchParams()
   const [f, setF] = useState({ q: '', source: params.get('source') || '', status: '', agent: '', date: '' })
+  const [error, setError] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshInFlight = useRef(false)
   const fileRef = useRef()
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+
+  useEffect(() => {
+    const refresh = async () => {
+      if (refreshInFlight.current) return
+      refreshInFlight.current = true
+      try {
+        await refreshLeads()
+        setError('')
+      } catch (requestError) {
+        setError(requestError.message)
+      } finally {
+        refreshInFlight.current = false
+        setRefreshing(false)
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(refresh, 20000)
+    return () => window.clearInterval(timer)
+  }, [refreshLeads])
+
+  const onRefresh = () => {
+    setRefreshing(true)
+    setError('')
+    if (refreshInFlight.current) return
+    refreshInFlight.current = true
+    refreshLeads()
+      .then(() => setError(''))
+      .catch((requestError) => setError(requestError.message))
+      .finally(() => {
+        refreshInFlight.current = false
+        setRefreshing(false)
+      })
+  }
 
   const rows = leads.filter((l) =>
     (!f.q || `${l.name} ${l.phone}`.toLowerCase().includes(f.q.toLowerCase())) &&
@@ -28,15 +64,13 @@ export default function Leads() {
     const input = e.target
     const file = input.files[0]
     if (file) {
-      const imported = parseCsv(await file.text())
-      setLeads((p) => {
-        const activeAgents = agents.filter((agent) => agent.active !== false)
-        let index = 0
-        return [...p, ...imported.map((lead) => ({
-          ...lead,
-          agentId: activeAgents.length ? activeAgents[index++ % activeAgents.length].id : null,
-        }))]
-      })
+      try {
+        const imported = parseCsv(await file.text())
+        await importLeads(imported)
+        setError('')
+      } catch (requestError) {
+        setError(requestError.message)
+      }
     }
     input.value = ''
   }
@@ -53,6 +87,9 @@ export default function Leads() {
     <>
       <PageHeader eyebrow="Lead Management" title="Central Lead Pool" subtitle="Facebook, Meta Ads, WhatsApp, Website and CSV leads in one place">
         <input ref={fileRef} type="file" accept=".csv" hidden onChange={onCsv} />
+        <button className="btn-outline" onClick={onRefresh} disabled={refreshing}>
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> Refresh leads
+        </button>
         <button className="btn-primary" onClick={() => fileRef.current.click()}><Upload size={16} /> Upload CSV</button>
       </PageHeader>
       <div className="mb-4 flex flex-wrap gap-2">
@@ -75,8 +112,9 @@ export default function Leads() {
         </select>
         <input className="input" type="date" value={f.date} onChange={set('date')} />
       </div>
+      {error && <p role="alert" className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
       <DataTable columns={columns} rows={rows} />
-      <p className="mt-2 text-xs text-slate-400">CSV columns: name, phone</p>
+      <p className="mt-2 text-xs text-slate-400">CSV columns: name, phone, email, state, city, propertyType, score. Leads are routed against employee availability and capacity.</p>
     </>
   )
 }

@@ -30,7 +30,15 @@ export const parseCsv = (text) => {
   return rows.map((r) => {
     const v = r.split(',').map((x) => x.trim())
     const o = Object.fromEntries(keys.map((k, j) => [k, v[j]]))
-    return { id: crypto.randomUUID(), name: o.name, phone: o.phone, source: 'CSV', status: 'New', agentId: null, date: new Date().toISOString().slice(0, 10), followUp: '' }
+    return {
+      name: o.name,
+      phone: o.phone,
+      email: o.email || '',
+      state: o.state || '',
+      city: o.city || '',
+      propertyType: o.propertytype || o['property type'] || '',
+      score: o.score || '',
+    }
   })
 }
 

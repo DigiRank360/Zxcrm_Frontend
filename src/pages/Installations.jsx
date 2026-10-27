@@ -8,8 +8,10 @@ import {
   FileText,
   Plus,
   Sun,
+  Truck,
 } from "lucide-react";
 import { Person } from "../components/Avatar";
+import { useAuth } from "../utils/AuthContext";
 import { useCrm } from "../utils/CrmContext";
 import { fmtDate, fmtDateTime, generateQuarterlySchedule } from "../utils/helpers";
 import { stateCities, states } from "../data/locations";
@@ -17,7 +19,6 @@ import PageHeader from "../components/PageHeader";
 import DataTable from "../components/DataTable";
 import Badge from "../components/Badge";
 
-const empty = { customer: "", phone: "", address: "", installDate: "" };
 const emptyApplication = {
   customer: "",
   phone: "",
@@ -43,9 +44,16 @@ const workflowStages = [
   { title: "Feasibility", owner: "Discom", icon: Building2 },
   { title: "Vendor Selection", owner: "Consumer", icon: CheckSquare },
   { title: "Upload Agreement", owner: "Vendor", icon: FileText },
+  { title: "Pre-site Inspection", owner: "Vendor", icon: FileText },
+  { title: "Material Dispatch", owner: "Vendor", icon: Truck },
   { title: "Installation", owner: "Vendor", icon: CheckSquare },
-  { title: "Inspection", owner: "Discom", icon: FileText },
+  { title: "Post-site Inspection", owner: "Discom", icon: FileText },
+  { title: "Project Commissioning", owner: "Discom", icon: Sun },
+  { title: "Subsidy Request", owner: "Consumer", icon: FileText },
+  { title: "Subsidy Disbursal", owner: "REC", icon: Check },
 ];
+
+const approvalStages = [2, 8];
 
 const applicationSections = [
   {
@@ -173,7 +181,7 @@ function WorkflowTimeline({ application }) {
   );
 }
 
-function ApplicationDetails({ application, onCompleteStep }) {
+function ApplicationDetails({ application, onCompleteStep, onApproval, approvalNote, setApprovalNote, users, isAdmin }) {
   const currentStage = getCurrentStage(application.steps);
   const complete = currentStage === -1;
 
@@ -206,14 +214,50 @@ function ApplicationDetails({ application, onCompleteStep }) {
 
       {!complete && (
         <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-500">
-            Current step: <span className="font-semibold text-slate-800">{workflowStages[currentStage].title}</span>
-            <span className="px-1">·</span>
-            {workflowStages[currentStage].owner}
-          </p>
-          <button className="btn-primary w-full sm:w-auto" onClick={() => onCompleteStep(application.id)}>
-            Complete step <ArrowRight size={16} />
-          </button>
+          <div>
+            <p className="text-sm text-slate-500">
+              Current step: <span className="font-semibold text-slate-800">{workflowStages[currentStage].title}</span>
+              <span className="px-1">·</span>{workflowStages[currentStage].owner}
+            </p>
+            {isAdmin && approvalStages.includes(currentStage) && (
+              <div className="mt-2">
+                <p className="text-xs font-semibold text-amber-700">Approval: {application.steps[currentStage].approvalStatus || 'Pending'}</p>
+                <input maxLength={1000} className="input mt-1 !w-full sm:!w-72" placeholder="Approval note or rejection reason" value={approvalNote} onChange={(event) => setApprovalNote(event.target.value)} />
+              </div>
+            )}
+            {!isAdmin && approvalStages.includes(currentStage) && (
+              <p className="mt-2 text-xs font-semibold text-amber-700">Waiting for administrator approval: {application.steps[currentStage].approvalStatus || 'Pending'}</p>
+            )}
+            {isAdmin && !approvalStages.includes(currentStage) && (
+              <p className="mt-2 text-xs text-slate-500">Employee-owned stage. Review progress here; only the assigned employee can complete this step.</p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {isAdmin && approvalStages.includes(currentStage) && application.steps[currentStage].approvalStatus !== 'Approved' && (
+              <>
+                <button className="btn-outline" onClick={() => onApproval(application.id, 'Rejected', approvalNote)}>Reject stage</button>
+                <button className="btn-outline" onClick={() => onApproval(application.id, 'Approved', approvalNote)}>Approve stage</button>
+              </>
+            )}
+            {!isAdmin && <button className="btn-primary" disabled={approvalStages.includes(currentStage) && application.steps[currentStage].approvalStatus !== 'Approved'} onClick={() => onCompleteStep(application.id)}>
+              Complete step <ArrowRight size={16} />
+            </button>}
+          </div>
+        </div>
+      )}
+      {application.approvalHistory?.length > 0 && (
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <h3 className="section-title">Approval history</h3>
+          <ul className="space-y-2 text-sm">
+            {application.approvalHistory.map((event, index) => (
+              <li key={`${event.occurredAt}-${index}`} className="flex flex-wrap gap-x-2 text-slate-600">
+                <span className="font-semibold">{workflowStages[event.stage]?.title}: {event.decision}</span>
+                <span>{event.note}</span>
+                <span>by {users.find((user) => user.id === event.userId)?.name || 'Administrator'}</span>
+                <span className="text-slate-400">{fmtDateTime(event.occurredAt)}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {complete && (
@@ -226,14 +270,15 @@ function ApplicationDetails({ application, onCompleteStep }) {
 }
 
 export default function Installations() {
-  const { installations, addInstallation, applications, addApplication, completeApplicationStep } = useCrm();
-  const [form, setForm] = useState(empty);
+  const { user } = useAuth();
+  const isAdmin = user.role === "admin";
+  const { installations, applications, addApplication, completeApplicationStep, decideApplicationApproval, users } = useCrm();
   const [applicationForm, setApplicationForm] = useState(emptyApplication);
   const [selectedId, setSelectedId] = useState(null);
   const [showApplicationForm, setShowApplicationForm] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const [approvalNote, setApprovalNote] = useState('');
   const setApplication = (k) => (e) => {
     const value = e.target.value;
     setApplicationForm((current) => ({
@@ -241,20 +286,6 @@ export default function Installations() {
       [k]: value,
       ...(k === "state" ? { city: "" } : {}),
     }));
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setError("");
-    try {
-      await addInstallation(form);
-      setForm(empty);
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const submitApplication = async (e) => {
@@ -286,6 +317,16 @@ export default function Installations() {
     setError("");
     try {
       await completeApplicationStep(id);
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const decideApproval = async (id, decision, note) => {
+    setError("");
+    try {
+      await decideApplicationApproval(id, decision, note);
+      setApprovalNote('');
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -332,21 +373,21 @@ export default function Installations() {
     <>
       <PageHeader
         eyebrow="Solar"
-        title="Installations"
-        subtitle="Track solar applications from consumer registration through discom inspection"
+        title={isAdmin ? "Solar application approvals" : "My solar installations"}
+        subtitle={isAdmin ? "Review every employee application and approve or reject the approval stages." : "Create applications, update each workflow step, and track your sites through subsidy disbursal."}
       >
-        <button
+        {!isAdmin && <button
           className="btn-primary"
           onClick={() => setShowApplicationForm((visible) => !visible)}
           aria-expanded={showApplicationForm}
         >
           <Plus size={16} /> New application
-        </button>
+        </button>}
       </PageHeader>
       {error && <p role="alert" className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
 
       <section className="mb-8">
-        {showApplicationForm && (
+        {!isAdmin && showApplicationForm && (
           <form onSubmit={submitApplication} className="card mb-5">
             <div className="mb-5 flex items-center gap-2">
               <Sun size={18} className="text-sun-500" />
@@ -437,7 +478,7 @@ export default function Installations() {
             <table className="w-full min-w-[760px]">
               <thead className="border-b border-slate-100 bg-slate-50/80">
                 <tr>
-                  {["Application", "Discom", "Consumer", "Approved capacity", "Current step", "Status"].map((label) => (
+                  {(isAdmin ? ["Application", "Discom", "Consumer", "Employee", "Approved capacity", "Current step", "Status"] : ["Application", "Discom", "Consumer", "Approved capacity", "Current step", "Status"]).map((label) => (
                     <th key={label} className="th">{label}</th>
                   ))}
                 </tr>
@@ -457,17 +498,18 @@ export default function Installations() {
                       <td className="td font-medium text-slate-900">{application.applicationNumber}</td>
                       <td className="td">{application.discom}</td>
                       <td className="td">{application.customer}</td>
+                      {isAdmin && <td className="td">{application.assignedEmployeeName || users.find((item) => item.id === application.assignedEmployeeId)?.name || "—"}</td>}
                       <td className="td">{application.approvedCapacity} kWp</td>
-                      <td className="td">{done ? "Inspection" : workflowStages[currentStage].title}</td>
-                      <td className="td"><Badge>{done ? "Completed" : "In Progress"}</Badge></td>
+                      <td className="td">{done ? "Completed" : workflowStages[currentStage].title}</td>
+                      <td className="td"><Badge>{done ? "Completed" : approvalStages.includes(currentStage) ? `Needs ${application.steps[currentStage].approvalStatus === "Approved" ? "employee update" : "approval"}` : "In Progress"}</Badge></td>
                     </tr>
                   );
                 })}
                 {!applications.length && (
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-sm text-slate-400">
+                    <td colSpan={isAdmin ? 7 : 6} className="px-5 py-10 text-center text-sm text-slate-400">
                       <Circle size={20} className="mx-auto mb-2" />
-                      No applications yet. Create a solar application to start the workflow.
+                      {isAdmin ? "No employee applications are waiting for review." : "No applications yet. Create a solar application to start the workflow."}
                     </td>
                   </tr>
                 )}
@@ -477,67 +519,15 @@ export default function Installations() {
         </div>
 
         {selectedApplication && (
-          <ApplicationDetails application={selectedApplication} onCompleteStep={completeStep} />
+          <ApplicationDetails application={selectedApplication} onCompleteStep={completeStep} onApproval={decideApproval} approvalNote={approvalNote} setApprovalNote={setApprovalNote} users={users} isAdmin={isAdmin} />
         )}
       </section>
 
       <PageHeader
         eyebrow="Service"
-        title="Active installations"
-        subtitle="Adding an installation auto-creates quarterly service tickets"
+        title={isAdmin ? "Commissioned installations" : "My commissioned installations"}
+        subtitle="Installations and quarterly maintenance are created automatically only after successful commissioning."
       />
-      <form onSubmit={submit} className="card mb-6">
-        <h2 className="mb-4 flex items-center gap-2 text-base font-bold text-slate-900">
-          <Sun size={18} className="text-sun-500" /> Add completed installation
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="text-xs font-semibold text-slate-500">
-            Customer
-            <input
-              required
-              className="input mt-1"
-              placeholder="Customer name"
-              value={form.customer}
-              onChange={set("customer")}
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-500">
-            Phone
-            <input
-              required
-              pattern="\+[1-9][0-9]{7,14}"
-              inputMode="tel"
-              className="input mt-1"
-              placeholder="+919876543210"
-              value={form.phone}
-              onChange={set("phone")}
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-500">
-            Address
-            <input
-              required
-              className="input mt-1"
-              placeholder="Address"
-              value={form.address}
-              onChange={set("address")}
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-500">
-            Install date
-            <input
-              required
-              type="date"
-              className="input mt-1"
-              value={form.installDate}
-              onChange={set("installDate")}
-            />
-          </label>
-          <button className="btn-primary self-end" disabled={saving}>
-            <Plus size={16} /> Add installation
-          </button>
-        </div>
-      </form>
       <DataTable columns={columns} rows={installations} />
     </>
   );

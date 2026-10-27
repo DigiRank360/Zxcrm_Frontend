@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Sun, Moon, User, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../utils/AuthContext'
+import Logo from '../components/Logo'
 
 export default function Login() {
   const { login } = useAuth()
@@ -46,9 +47,9 @@ export default function Login() {
       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-900 via-brand-800 to-brand-600 p-12 text-white lg:flex">
         <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full bg-sun-400/30 blur-3xl" />
         <div className="absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-brand-500/40 blur-3xl" />
-        <div className="relative flex items-center gap-3 text-2xl font-extrabold">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-sun-400 to-orange-500"><Sun /></div>
-          ZX Solar CRM
+        <div className="relative">
+          <Logo onDark className="h-12" />
+          <p className="mt-3 text-xs font-medium uppercase tracking-[0.22em] text-blue-200">CRM Suite</p>
         </div>
         <img src="/solar-hero.svg" alt="Solar panels under the sun" className="relative mx-auto w-full max-w-md animate-float drop-shadow-2xl" />
         <div className="relative">
@@ -68,7 +69,8 @@ export default function Login() {
         >
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-        <div className="card w-full max-w-md animate-fadeUp !p-8 shadow-lift">
+        <div className="card w-full max-w-md animate-fadeUp !p-6 shadow-lift sm:!p-8">
+          <Logo className="mb-6 h-11 lg:hidden" />
           <h1 className="text-2xl font-extrabold text-slate-900">Welcome back</h1>
           <p className="mb-6 mt-1 text-sm text-slate-500">Sign in with your ID and password</p>
           {setupError && <p role="alert" className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{setupError}</p>}

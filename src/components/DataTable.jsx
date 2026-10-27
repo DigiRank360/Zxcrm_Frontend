@@ -1,7 +1,7 @@
 export default function DataTable({ columns, rows, empty = 'No records found' }) {
   return (
     <div className="animate-fadeUp overflow-x-auto rounded-2xl border border-white/80 bg-white/90 shadow-soft ring-1 ring-slate-900/5">
-      <table className="w-full">
+      <table className="w-full min-w-[640px]">
         <thead className="border-b border-slate-100 bg-slate-50/80">
           <tr>{columns.map((c) => <th key={c.key} className="th">{c.label}</th>)}</tr>
         </thead>
