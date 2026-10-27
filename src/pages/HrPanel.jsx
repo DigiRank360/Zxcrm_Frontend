@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Banknote, BriefcaseBusiness, Check, Download, Save, Upload } from 'lucide-react'
+import { Banknote, BriefcaseBusiness, CalendarDays, Check, ChevronRight, Download, Save, Search, Upload, UserRound, UsersRound } from 'lucide-react'
 import Badge from '../components/Badge'
 import PageHeader from '../components/PageHeader'
 import StatCard from '../components/StatCard'
@@ -178,6 +178,10 @@ export default function HrPanel() {
   const [employees, setEmployees] = useState([])
   const [payroll, setPayroll] = useState([])
   const [form, setForm] = useState({ employeeId: '', month: thisMonth, deductionLabel: '', deductionAmount: '' })
+  const [payrollEmployeeFilter, setPayrollEmployeeFilter] = useState('')
+  const [payrollMonthFilter, setPayrollMonthFilter] = useState('')
+  const [payrollPreview, setPayrollPreview] = useState(null)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -195,6 +199,7 @@ export default function HrPanel() {
         ...current,
         employeeId: current.employeeId || employeeRows.find((employee) => employee.active !== false && employee.monthlySalary !== undefined)?.id || '',
       }))
+      setSelectedEmployeeId((current) => current || employeeRows.find((employee) => employee.active !== false)?.id || '')
     }).catch((requestError) => {
       if (active) setError(requestError.message)
     }).finally(() => {
@@ -202,6 +207,15 @@ export default function HrPanel() {
     })
     return () => { active = false }
   }, [token])
+
+  useEffect(() => {
+    if (!form.employeeId || !form.month) return undefined
+    let active = true
+    apiRequest(`/api/hr/payroll/preview?employeeId=${encodeURIComponent(form.employeeId)}&month=${encodeURIComponent(form.month)}`, { token })
+      .then((result) => { if (active) setPayrollPreview(result) })
+      .catch((requestError) => { if (active) setError(requestError.message) })
+    return () => { active = false }
+  }, [form.employeeId, form.month, token])
 
   const saveProfile = (id, profile) => {
     setEmployees((current) => current.map((employee) => employee.id === id ? { ...employee, ...profile } : employee))
@@ -241,15 +255,55 @@ export default function HrPanel() {
     } catch (requestError) {
       setError(requestError.message)
     }
+
+  }
+
+  const syncPayroll = async (id) => {
+    setError('')
+    try {
+      const updated = await apiRequest(`/api/hr/payroll/${id}/sync`, { method: 'PATCH', token })
+      setPayroll((current) => current.map((record) => record.id === id ? updated : record))
+    } catch (requestError) {
+      setError(requestError.message)
+    }
+
+  }
+
+  const downloadPayrollSlip = async (record) => {
+    setError('')
+    try {
+      const response = await fetch(`/api/hr/payroll/${record.id}/slip`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}))
+        throw new Error(result.error || `Download failed (${response.status})`)
+      }
+      const url = URL.createObjectURL(await response.blob())
+      const link = window.document.createElement('a')
+      link.href = url
+      link.download = `salary-slip-${record.month}-${record.employeeName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.html`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (requestError) {
+      setError(requestError.message)
+    }
   }
 
   const activeEmployees = employees.filter((employee) => employee.active !== false)
   const payrollEmployees = activeEmployees.filter((employee) => employee.monthlySalary !== undefined)
   const pending = payroll.filter((record) => record.status === 'Pending')
+  const visiblePayroll = payroll.filter((record) =>
+    (!payrollEmployeeFilter || record.employeeId === payrollEmployeeFilter) &&
+    (!payrollMonthFilter || record.month === payrollMonthFilter))
+  const payrollByEmployee = payrollEmployees.map((employee) => {
+    const records = payroll.filter((record) => record.employeeId === employee.id)
+    return { employee, records, current: records.find((record) => record.month === thisMonth) }
+  })
 
   return (
     <>
-      <PageHeader eyebrow="Human resources" title="HR & payroll" subtitle="Employee records, monthly salary, attendance review, and payroll slips." />
+      <PageHeader eyebrow="Human resources" title="HR & payroll" subtitle="Manage every employee profile, salary, deductions, payslip and payment status from one clean workspace." />
       {error && <p role="alert" className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <StatCard label="Active employees" value={activeEmployees.length} icon={BriefcaseBusiness} />
@@ -257,19 +311,78 @@ export default function HrPanel() {
         <StatCard label="Pending payments" value={pending.length} icon={Banknote} tone="amber" />
       </div>
 
+      <section className="mb-6">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <h2 className="section-title">Employee payroll overview</h2>
+            <p className="text-xs text-slate-500">Each employee has an independent monthly payroll record and payment status.</p>
+          </div>
+          <UsersRound size={20} className="text-brand-600" />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {payrollByEmployee.map(({ employee, records, current }) => (
+            <button type="button" key={employee.id} onClick={() => setPayrollEmployeeFilter(employee.id)} className={`card !p-4 text-left transition hover:-translate-y-0.5 hover:shadow-lift ${payrollEmployeeFilter === employee.id ? 'ring-2 ring-brand-300' : ''}`}>
+              <div className="flex items-start justify-between gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700"><UserRound size={18} /></span>
+                <Badge>{current?.status || 'Not created'}</Badge>
+              </div>
+              <p className="mt-3 font-bold text-slate-900">{employee.name}</p>
+              <p className="text-xs text-slate-500">{employee.jobTitle || employee.role} · {employee.username}</p>
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                <div><p className="text-[11px] uppercase tracking-wide text-slate-400">Monthly salary</p><p className="font-semibold text-slate-800">{money(employee.monthlySalary)}</p></div>
+                <div><p className="text-[11px] uppercase tracking-wide text-slate-400">Records</p><p className="font-semibold text-slate-800">{records.length}</p></div>
+              </div>
+            </button>
+          ))}
+        </div>
+        {!payrollByEmployee.length && <div className="card py-8 text-center text-sm text-slate-500">Save salary details for an employee to start payroll management.</div>}
+      </section>
+
       <section className="card mb-6 !p-0">
         <div className="border-b border-slate-100 px-5 py-4">
           <h2 className="section-title">Employee management</h2>
-          <p className="text-xs text-slate-500">Bank details and private documents are visible only to HR and that employee; bank data is encrypted at rest.</p>
+          <p className="text-xs text-slate-500">Select an active employee to manage their profile, salary, bank details and private documents. Bank data is encrypted at rest.</p>
         </div>
-        {loading ? <p className="p-5 text-sm text-slate-500">Loading employees…</p>
-          : employees.map((employee) => <EmployeeProfile key={employee.id} employee={employee} token={token} onSaved={saveProfile} />)}
-        {!loading && !employees.length && <p className="p-5 text-sm text-slate-500">Create employee or technician accounts in Team accounts first.</p>}
+        {loading ? <p className="p-5 text-sm text-slate-500">Loading employees…</p> : (
+          <>
+            <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+              {activeEmployees.map((employee) => (
+                <button
+                  type="button"
+                  key={employee.id}
+                  onClick={() => setSelectedEmployeeId(employee.id)}
+                  className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-soft ${selectedEmployeeId === employee.id ? 'border-brand-300 bg-brand-50/60 ring-2 ring-brand-100' : 'border-slate-200 bg-white'}`}
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white">{employee.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-slate-900">{employee.name}</span>
+                    <span className="block truncate text-xs text-slate-500">{employee.jobTitle || employee.role} · {employee.username}</span>
+                    <span className="mt-1 block text-xs font-semibold text-brand-700">{employee.monthlySalary !== undefined ? money(employee.monthlySalary) : 'Salary not set'}</span>
+                  </span>
+                  <ChevronRight size={17} className={selectedEmployeeId === employee.id ? 'text-brand-600' : 'text-slate-300'} />
+                </button>
+              ))}
+            </div>
+            {!activeEmployees.length && <p className="p-5 text-sm text-slate-500">Create employee or technician accounts in Team accounts first.</p>}
+            {selectedEmployeeId && employees.find((employee) => employee.id === selectedEmployeeId) && (
+              <div className="border-t border-slate-100 bg-slate-50/40">
+                <EmployeeProfile
+                  employee={employees.find((employee) => employee.id === selectedEmployeeId)}
+                  token={token}
+                  onSaved={saveProfile}
+                />
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       <form onSubmit={createPayroll} className="card mb-6">
-        <h2 className="section-title">Create monthly payroll</h2>
-        <p className="mb-4 text-xs text-slate-500">Monthly salary is paid in full with no attendance proration. Enter statutory and other deductions manually; the system does not estimate taxes.</p>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div><h2 className="section-title">Create monthly payroll</h2><p className="text-xs text-slate-500">Create one separate payslip per employee and pay month.</p></div>
+          <CalendarDays size={20} className="text-brand-600" />
+        </div>
+        <p className="mb-4 text-xs text-slate-500">Payable salary is calculated from attendance for the selected month. Present/on-field is a full day, half-day is 0.5 day, and missing weekdays are unpaid. Add manual deductions after the preview.</p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <label className="text-xs font-semibold text-slate-600">Employee
             <select required className="input mt-1" value={form.employeeId} onChange={(event) => setForm((current) => ({ ...current, employeeId: event.target.value }))}>
@@ -286,26 +399,42 @@ export default function HrPanel() {
             <input type="number" min="0" step="0.01" className="input mt-1" value={form.deductionAmount} onChange={(event) => setForm((current) => ({ ...current, deductionAmount: event.target.value }))} />
           </label>
         </div>
+        {payrollPreview && (
+          <div className="mt-4 grid gap-3 rounded-xl border border-brand-100 bg-brand-50/60 p-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div><p className="text-[11px] uppercase tracking-wide text-brand-700">Scheduled days</p><p className="text-lg font-bold text-slate-900">{payrollPreview.scheduledDays}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-brand-700">Present / half</p><p className="text-lg font-bold text-slate-900">{payrollPreview.presentDays} / {payrollPreview.halfDays}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-brand-700">Payable days</p><p className="text-lg font-bold text-slate-900">{payrollPreview.payableDays}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-brand-700">Attendance salary</p><p className="text-lg font-bold text-slate-900">{money(payrollPreview.attendanceSalary)}</p></div>
+            <div><p className="text-[11px] uppercase tracking-wide text-brand-700">After current deduction</p><p className="text-lg font-bold text-slate-900">{money(Math.max(0, payrollPreview.attendanceSalary - (Number(form.deductionAmount) || 0)))}</p></div>
+          </div>
+        )}
         {!payrollEmployees.length && <p className="mt-3 text-xs text-amber-700">Save a monthly salary in an employee profile before creating payroll.</p>}
         <button disabled={saving || !payrollEmployees.length || !form.employeeId} className="btn-primary mt-4">{saving ? 'Creating…' : 'Create payslip'}</button>
       </form>
 
       <section className="card overflow-hidden !p-0">
-        <div className="border-b border-slate-100 px-5 py-4"><h2 className="section-title">Payroll & payslips</h2></div>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div><h2 className="section-title">Payroll & payslips</h2><p className="text-xs text-slate-500">Review, filter and mark each employee’s monthly payroll as paid.</p></div>
+          <div className="flex flex-wrap gap-2">
+            <label className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><select aria-label="Filter payroll by employee" className="input !w-52 !pl-8 !py-2 text-xs" value={payrollEmployeeFilter} onChange={(event) => setPayrollEmployeeFilter(event.target.value)}><option value="">All employees</option>{payrollEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select></label>
+            <input aria-label="Filter payroll by month" type="month" className="input !w-36 !py-2 text-xs" value={payrollMonthFilter} onChange={(event) => setPayrollMonthFilter(event.target.value)} />
+            {(payrollEmployeeFilter || payrollMonthFilter) && <button type="button" className="btn-outline !py-2 text-xs" onClick={() => { setPayrollEmployeeFilter(''); setPayrollMonthFilter('') }}>Clear</button>}
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px]">
             <thead><tr><th className="th">Employee</th><th className="th">Month</th><th className="th">Gross salary</th><th className="th">Deductions</th><th className="th">Net pay</th><th className="th">Status</th><th className="th">Action</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
-              {payroll.map((record) => <tr key={record.id}>
+              {visiblePayroll.map((record) => <tr key={record.id}>
                 <td className="td font-medium">{record.employeeName}</td>
                 <td className="td">{record.month}</td>
                 <td className="td">{money(record.grossSalary)}</td>
                 <td className="td">{record.deductions.length ? record.deductions.map((item) => `${item.label}: ${money(item.amount)}`).join(', ') : '—'}</td>
                 <td className="td font-semibold">{money(record.netSalary)}</td>
                 <td className="td"><Badge>{record.status}</Badge></td>
-                <td className="td">{record.status === 'Paid' ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><Check size={14} /> Paid</span> : <button className="btn-outline !px-2 !py-1" onClick={() => markPaid(record.id)}>Mark paid</button>}</td>
+                <td className="td"><div className="flex flex-wrap gap-2">{record.status === 'Paid' ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><Check size={14} /> Paid</span> : <><button className="btn-outline !px-2 !py-1 text-xs" onClick={() => syncPayroll(record.id)}>Recalculate</button><button className="btn-outline !px-2 !py-1 text-xs" onClick={() => markPaid(record.id)}>Mark paid</button></>}<button className="btn-outline !px-2 !py-1 text-xs" onClick={() => downloadPayrollSlip(record)}><Download size={14} /> Slip</button></div></td>
               </tr>)}
-              {!payroll.length && <tr><td className="px-5 py-10 text-center text-sm text-slate-400" colSpan={7}>No payroll records yet.</td></tr>}
+              {!visiblePayroll.length && <tr><td className="px-5 py-10 text-center text-sm text-slate-400" colSpan={7}>{payroll.length ? 'No payroll matches the selected filters.' : 'No payroll records yet.'}</td></tr>}
             </tbody>
           </table>
         </div>

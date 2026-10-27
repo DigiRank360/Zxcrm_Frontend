@@ -212,6 +212,15 @@ export function CrmProvider({ children }) {
     return result.lead
   }
 
+  const updateLead = async (id, updates) => {
+    const updated = await apiRequest(`/api/leads/${id}`, {
+      method: 'PATCH', token, body: JSON.stringify(updates),
+    })
+    setLeadsState((current) => current.map((lead) => lead.id === id ? updated : lead))
+    stateRef.current = { ...stateRef.current, leads: stateRef.current.leads.map((lead) => lead.id === id ? updated : lead) }
+    return updated
+  }
+
   const importLeads = async (items) => {
     const result = await apiRequest('/api/leads/import', {
       method: 'POST', token, body: JSON.stringify(items),
@@ -229,7 +238,7 @@ export function CrmProvider({ children }) {
     applications, addApplication, completeApplicationStep, decideApplicationApproval, customers,
     users, addUser, updateAgentRouting, updateUserProfile, softDeleteUser, restoreUser,
     visits, addVisit, uploadPhoto,
-    autoAssignLeads, assignLead, importLeads, refreshLeads, loading, error,
+    autoAssignLeads, assignLead, updateLead, importLeads, refreshLeads, loading, error,
   }
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>
 }

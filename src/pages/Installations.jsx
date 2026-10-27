@@ -1,18 +1,23 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
   Building2,
   Check,
   CheckSquare,
   Circle,
+  Download,
   FileText,
+  FileCheck,
   Plus,
   Sun,
   Truck,
+  Upload,
 } from "lucide-react";
 import { Person } from "../components/Avatar";
 import { useAuth } from "../utils/AuthContext";
 import { useCrm } from "../utils/CrmContext";
+import { apiRequest } from "../utils/api";
+import { documentToDataUrl } from "../utils/uploads";
 import { fmtDate, fmtDateTime, generateQuarterlySchedule } from "../utils/helpers";
 import { stateCities, states } from "../data/locations";
 import PageHeader from "../components/PageHeader";
@@ -38,7 +43,7 @@ const emptyApplication = {
   pinCode: "",
 };
 
-const workflowStages = [
+const backendWorkflowStages = [
   { title: "Registration", owner: "Consumer", icon: Check },
   { title: "Application", owner: "Consumer", icon: FileText },
   { title: "Feasibility", owner: "Discom", icon: Building2 },
@@ -51,6 +56,16 @@ const workflowStages = [
   { title: "Project Commissioning", owner: "Discom", icon: Sun },
   { title: "Subsidy Request", owner: "Consumer", icon: FileText },
   { title: "Subsidy Disbursal", owner: "REC", icon: Check },
+];
+
+const installationWorkflowStages = [
+  { title: "Application", owner: "Employee", icon: FileText, stepIndices: [0, 1, 2, 3, 4] },
+  { title: "Pre-site Inspection", owner: "Employee", icon: FileText, stepIndices: [5] },
+  { title: "Material Dispatch", owner: "Employee", icon: Truck, stepIndices: [6] },
+  { title: "Installation", owner: "Employee", icon: CheckSquare, stepIndices: [7] },
+  { title: "Post-site Inspection", owner: "Discom", icon: FileText, stepIndices: [8] },
+  { title: "Commissioning", owner: "Discom", icon: Sun, stepIndices: [9] },
+  { title: "Subsidy", owner: "Consumer / REC", icon: Check, stepIndices: [10, 11] },
 ];
 
 const approvalStages = [2, 8];
@@ -115,18 +130,25 @@ function getCurrentStage(steps) {
   return steps.findIndex((step) => !step.completedAt);
 }
 
+function getInstallationStage(steps) {
+  const index = getCurrentStage(steps);
+  if (index < 0) return -1;
+  return installationWorkflowStages.findIndex((stage) => stage.stepIndices.includes(index));
+}
+
 function WorkflowTimeline({ application }) {
-  const currentStage = getCurrentStage(application.steps);
+  const currentStage = getInstallationStage(application.steps);
 
   return (
     <ol className="flex flex-col lg:flex-row lg:items-start">
-      {workflowStages.map((stage, index) => {
-        const step = application.steps[index];
-        const completed = Boolean(step.completedAt);
+      {installationWorkflowStages.map((stage, index) => {
+        const completed = stage.stepIndices.every((stepIndex) => application.steps[stepIndex]?.completedAt);
         const active = index === currentStage;
         const Icon = completed ? Check : stage.icon;
-        const last = index === workflowStages.length - 1;
+        const last = index === installationWorkflowStages.length - 1;
         const state = completed ? "Completed" : active ? "In Progress" : "Pending";
+        const lastCompletedStep = [...stage.stepIndices].reverse().find((stepIndex) => application.steps[stepIndex]?.completedAt);
+        const step = application.steps[lastCompletedStep ?? stage.stepIndices[0]];
 
         return (
           <li key={stage.title} className="flex gap-3 lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-0">
@@ -181,6 +203,99 @@ function WorkflowTimeline({ application }) {
   );
 }
 
+function ValuationDocuments({ installation, isAdmin, token }) {
+  const [documents, setDocuments] = useState([]);
+  const [file, setFile] = useState(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(() => apiRequest(`/api/installations/${installation.id}/valuation-documents`, { token })
+    .then(setDocuments)
+    .catch((requestError) => setError(requestError.message)), [installation.id, token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const upload = async () => {
+    if (!file) return;
+    setSaving(true);
+    setError("");
+    try {
+      const document = await documentToDataUrl(file);
+      await apiRequest(`/api/installations/${installation.id}/valuation-documents`, {
+        method: "POST",
+        token,
+        body: JSON.stringify({ document, fileName: file.name }),
+      });
+      setFile(null);
+      await load();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const review = async (document, status) => {
+    const note = window.prompt(`Note for ${status}`, status === "Rejected" ? "Please upload a corrected document." : "");
+    if (note === null) return;
+    setError("");
+    try {
+      await apiRequest(`/api/installations/${installation.id}/valuation-documents/${document.id}/review`, {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ status, note }),
+      });
+      await load();
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  const download = async (document) => {
+    try {
+      const result = await apiRequest(`/api/installations/${installation.id}/valuation-documents/${document.id}/download`, { token });
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  };
+
+  return (
+    <div className="card mt-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="section-title flex items-center gap-2"><FileCheck size={17} className="text-brand-600" /> Valuation documents</h2>
+          <p className="mt-1 text-xs text-slate-500">Employee uploads; admin verifies and approves each document.</p>
+        </div>
+        {!isAdmin && (
+          <div className="flex items-center gap-2">
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={(event) => setFile(event.target.files?.[0] || null)} className="max-w-[210px] text-xs" />
+            <button type="button" className="btn-primary" disabled={!file || saving} onClick={upload}><Upload size={15} /> {saving ? "Uploading…" : "Upload"}</button>
+          </div>
+        )}
+      </div>
+      {error && <p role="alert" className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
+      <div className="space-y-2">
+        {documents.map((document) => (
+          <div key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-800">{document.fileName}</p>
+              <p className="text-xs text-slate-500">{document.status} · {fmtDateTime(document.uploadedAt)}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className="btn-outline !px-2.5 !py-1.5 text-xs" onClick={() => download(document)}><Download size={14} /> View</button>
+              {isAdmin && document.status === "Submitted" && <button type="button" className="btn-outline !px-2.5 !py-1.5 text-xs" onClick={() => review(document, "Verified")}><FileCheck size={14} /> Verify</button>}
+              {isAdmin && document.status === "Verified" && <button type="button" className="btn-primary !px-2.5 !py-1.5 text-xs" onClick={() => review(document, "Approved")}><Check size={14} /> Approve</button>}
+              {isAdmin && document.status !== "Approved" && <button type="button" className="btn-outline !border-rose-200 !px-2.5 !py-1.5 text-xs !text-rose-700" onClick={() => review(document, "Rejected")}>Reject</button>}
+            </div>
+          </div>
+        ))}
+        {!documents.length && <p className="py-3 text-sm text-slate-500">No valuation document uploaded yet.</p>}
+      </div>
+    </div>
+  );
+}
+
 function ApplicationDetails({ application, onCompleteStep, onApproval, approvalNote, setApprovalNote, users, isAdmin }) {
   const currentStage = getCurrentStage(application.steps);
   const complete = currentStage === -1;
@@ -216,8 +331,8 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
         <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm text-slate-500">
-              Current step: <span className="font-semibold text-slate-800">{workflowStages[currentStage].title}</span>
-              <span className="px-1">·</span>{workflowStages[currentStage].owner}
+              Current step: <span className="font-semibold text-slate-800">{installationWorkflowStages[getInstallationStage(application.steps)].title}</span>
+              <span className="px-1">·</span>{installationWorkflowStages[getInstallationStage(application.steps)].owner}
             </p>
             {isAdmin && approvalStages.includes(currentStage) && (
               <div className="mt-2">
@@ -251,7 +366,7 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
           <ul className="space-y-2 text-sm">
             {application.approvalHistory.map((event, index) => (
               <li key={`${event.occurredAt}-${index}`} className="flex flex-wrap gap-x-2 text-slate-600">
-                <span className="font-semibold">{workflowStages[event.stage]?.title}: {event.decision}</span>
+                <span className="font-semibold">{backendWorkflowStages[event.stage]?.title}: {event.decision}</span>
                 <span>{event.note}</span>
                 <span>by {users.find((user) => user.id === event.userId)?.name || 'Administrator'}</span>
                 <span className="text-slate-400">{fmtDateTime(event.occurredAt)}</span>
@@ -270,7 +385,7 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
 }
 
 export default function Installations() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const isAdmin = user.role === "admin";
   const { installations, applications, addApplication, completeApplicationStep, decideApplicationApproval, users } = useCrm();
   const [applicationForm, setApplicationForm] = useState(emptyApplication);
@@ -296,7 +411,7 @@ export default function Installations() {
     const application = {
       ...applicationForm,
       createdAt: now,
-      steps: workflowStages.map((_, index) => ({
+      steps: backendWorkflowStages.map((_, index) => ({
         startedAt: index === 0 ? now : "",
         completedAt: "",
       })),
@@ -500,7 +615,7 @@ export default function Installations() {
                       <td className="td">{application.customer}</td>
                       {isAdmin && <td className="td">{application.assignedEmployeeName || users.find((item) => item.id === application.assignedEmployeeId)?.name || "—"}</td>}
                       <td className="td">{application.approvedCapacity} kWp</td>
-                      <td className="td">{done ? "Completed" : workflowStages[currentStage].title}</td>
+                      <td className="td">{done ? "Completed" : installationWorkflowStages[getInstallationStage(application.steps)].title}</td>
                       <td className="td"><Badge>{done ? "Completed" : approvalStages.includes(currentStage) ? `Needs ${application.steps[currentStage].approvalStatus === "Approved" ? "employee update" : "approval"}` : "In Progress"}</Badge></td>
                     </tr>
                   );
@@ -529,6 +644,9 @@ export default function Installations() {
         subtitle="Installations and quarterly maintenance are created automatically only after successful commissioning."
       />
       <DataTable columns={columns} rows={installations} />
+      {installations.map((installation) => (
+        <ValuationDocuments key={installation.id} installation={installation} isAdmin={isAdmin} token={token} />
+      ))}
     </>
   );
 }
