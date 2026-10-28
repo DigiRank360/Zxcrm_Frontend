@@ -1,3 +1,4 @@
+import { DOCUMENT_TYPES } from '../utils/documentTypes'
 import { useEffect, useState } from 'react'
 import { Banknote, BriefcaseBusiness, CalendarDays, Check, ChevronRight, Download, Save, Search, Upload, UserRound, UsersRound } from 'lucide-react'
 import Badge from '../components/Badge'
@@ -23,7 +24,7 @@ function EmployeeProfile({ employee, token, onSaved }) {
     accountNumber: employee.bankDetails?.accountNumber || '',
     ifsc: employee.bankDetails?.ifsc || '',
   })
-  const [documentCategory, setDocumentCategory] = useState('Identity proof')
+  const [documentCategory, setDocumentCategory] = useState(DOCUMENT_TYPES[0])
   const [documentFile, setDocumentFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -39,6 +40,29 @@ function EmployeeProfile({ employee, token, onSaved }) {
         body: JSON.stringify({ ...form, monthlySalary: Number(form.monthlySalary) }),
       })
       onSaved(employee.id, profile)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const [personal, setPersonal] = useState({
+    presentAddress: employee.presentAddress || '',
+    temporaryAddress: employee.temporaryAddress || '',
+    motherName: employee.motherName || '',
+    fatherName: employee.fatherName || '',
+    dateOfBirth: employee.dateOfBirth || '',
+  })
+
+  const savePersonal = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const result = await apiRequest(`/api/hr/employees/${employee.id}/personal-details`, {
+        method: 'PATCH', token, body: JSON.stringify(personal),
+      })
+      onSaved(employee.id, result)
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -110,6 +134,7 @@ function EmployeeProfile({ employee, token, onSaved }) {
         <div>
           <p className="font-semibold text-slate-900">{employee.name}</p>
           <p className="text-xs text-slate-500">{employee.username} · {employee.role === 'technician' ? 'Technician' : 'Employee'}</p>
+          <p className="text-xs text-slate-500">ID {employee.employee?.reference} · Mobile {employee.phone || '—'} · Email {employee.employee?.email || '—'}</p>
         </div>
         <Badge>{employee.active === false ? 'Inactive' : 'Active'}</Badge>
       </div>
@@ -146,12 +171,33 @@ function EmployeeProfile({ employee, token, onSaved }) {
         <button type="button" disabled={saving} onClick={saveBank} className="btn-outline mt-3"><Save size={15} /> Save bank details</button>
       </div>
       <div className="mt-4 rounded-xl border border-slate-200 p-4">
+        <h3 className="mb-3 text-sm font-bold text-slate-800">Personal details</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-semibold text-slate-600">Present address
+            <input maxLength={300} className="input mt-1" value={personal.presentAddress} onChange={(event) => setPersonal((current) => ({ ...current, presentAddress: event.target.value }))} />
+          </label>
+          <label className="text-xs font-semibold text-slate-600">Temporary address
+            <input maxLength={300} className="input mt-1" value={personal.temporaryAddress} onChange={(event) => setPersonal((current) => ({ ...current, temporaryAddress: event.target.value }))} />
+          </label>
+          <label className="text-xs font-semibold text-slate-600">Father name
+            <input maxLength={300} className="input mt-1" value={personal.fatherName} onChange={(event) => setPersonal((current) => ({ ...current, fatherName: event.target.value }))} />
+          </label>
+          <label className="text-xs font-semibold text-slate-600">Mother name
+            <input maxLength={300} className="input mt-1" value={personal.motherName} onChange={(event) => setPersonal((current) => ({ ...current, motherName: event.target.value }))} />
+          </label>
+          <label className="text-xs font-semibold text-slate-600">Date of birth
+            <input type="date" maxLength={300} className="input mt-1" value={personal.dateOfBirth} onChange={(event) => setPersonal((current) => ({ ...current, dateOfBirth: event.target.value }))} />
+          </label>
+        </div>
+        <button type="button" disabled={saving} onClick={savePersonal} className="btn-primary mt-3">Save personal details</button>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-slate-200 p-4">
         <h3 className="mb-3 text-sm font-bold text-slate-800">Private employee documents</h3>
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs font-semibold text-slate-600">Document type
             <select className="input mt-1" value={documentCategory} onChange={(event) => setDocumentCategory(event.target.value)}>
-              <option>Identity proof</option>
-              <option>Bank proof</option>
+              {DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}
             </select>
           </label>
           <label className="min-w-56 flex-1 text-xs font-semibold text-slate-600">Choose PDF, JPEG, or PNG (up to 7 MB)

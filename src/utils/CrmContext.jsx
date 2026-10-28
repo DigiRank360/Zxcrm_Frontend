@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { apiRequest } from './api'
 import { useAuth } from './AuthContext'
-import { fileToDataUrl } from './uploads'
+import { documentToDataUrl, fileToDataUrl } from './uploads'
 
 const CrmContext = createContext(null)
 
@@ -15,6 +15,7 @@ export function CrmProvider({ children }) {
   const [customers, setCustomers] = useState([])
   const [users, setUsers] = useState([])
   const [visits, setVisits] = useState([])
+  const [holidays, setHolidays] = useState([])
   const [loadedToken, setLoadedToken] = useState('')
   const [error, setError] = useState('')
   const stateRef = useRef({
@@ -43,6 +44,7 @@ export function CrmProvider({ children }) {
         setCustomers(data.customers || [])
         setUsers(data.users || [])
         setVisits(data.visits || [])
+        setHolidays(data.holidays || [])
         stateRef.current = { ...stateRef.current, applications: data.applications || [] }
         setError('')
       })
@@ -126,6 +128,47 @@ export function CrmProvider({ children }) {
     stateRef.current = { ...stateRef.current, applications: stateRef.current.applications.map((item) => item.id === id ? updated : item) }
   }
 
+  const replaceApplication = (updated) => {
+    setApplicationsState((current) => current.map((item) => item.id === updated.id ? updated : item))
+    stateRef.current = { ...stateRef.current, applications: stateRef.current.applications.map((item) => item.id === updated.id ? updated : item) }
+  }
+
+  const updateApplicationCommercial = async (id, details) => {
+    const updated = await apiRequest(`/api/applications/${id}/commercial`, {
+      method: 'PATCH', token, body: JSON.stringify(details),
+    })
+    replaceApplication(updated)
+    return updated
+  }
+
+  const uploadApplicationOcr = async (id, file) => {
+    const document = await documentToDataUrl(file)
+    const updated = await apiRequest(`/api/applications/${id}/ocr-document`, {
+      method: 'POST', token, body: JSON.stringify({ document, fileName: file.name }),
+    })
+    replaceApplication(updated)
+    return updated
+  }
+
+  const assignInstallation = async (id, employeeId) => {
+    const result = await apiRequest(`/api/installations/${id}/assign`, {
+      method: 'PATCH', token, body: JSON.stringify({ employeeId: employeeId || null }),
+    })
+    setInstallationsState((current) => current.map((item) => item.id === id ? result.installation : item))
+    stateRef.current = {
+      ...stateRef.current,
+      installations: stateRef.current.installations.map((item) => item.id === id ? result.installation : item),
+    }
+    if (result.application) {
+      setApplicationsState((current) => current.map((item) => item.id === result.application.id ? result.application : item))
+      stateRef.current = {
+        ...stateRef.current,
+        applications: stateRef.current.applications.map((item) => item.id === result.application.id ? result.application : item),
+      }
+    }
+    return result.installation
+  }
+
   const addTicket = async (ticket) => {
     const result = await apiRequest('/api/maintenance', { method: 'POST', token, body: JSON.stringify(ticket) })
     setMaintenanceLocal((current) => [...current, result.ticket])
@@ -146,6 +189,19 @@ export function CrmProvider({ children }) {
     })
     setVisits((current) => [created, ...current])
     return created
+  }
+
+  const addHoliday = async (holiday) => {
+    const created = await apiRequest('/api/holidays', {
+      method: 'POST', token, body: JSON.stringify(holiday),
+    })
+    setHolidays((current) => [...current, created].sort((a, b) => a.date.localeCompare(b.date)))
+    return created
+  }
+
+  const removeHoliday = async (id) => {
+    await apiRequest(`/api/holidays/${id}`, { method: 'DELETE', token })
+    setHolidays((current) => current.filter((item) => item.id !== id))
   }
 
   const assignTicket = async (id, workerId) => {
@@ -212,6 +268,15 @@ export function CrmProvider({ children }) {
     return result.lead
   }
 
+  const transferLeadLocation = async (id, destination) => {
+    const result = await apiRequest(`/api/leads/${id}/transfer-location`, {
+      method: 'PATCH', token, body: JSON.stringify(destination),
+    })
+    setLeadsState((current) => current.map((lead) => lead.id === id ? result.lead : lead))
+    stateRef.current = { ...stateRef.current, leads: stateRef.current.leads.map((lead) => lead.id === id ? result.lead : lead) }
+    return result.lead
+  }
+
   const updateLead = async (id, updates) => {
     const updated = await apiRequest(`/api/leads/${id}`, {
       method: 'PATCH', token, body: JSON.stringify(updates),
@@ -235,10 +300,10 @@ export function CrmProvider({ children }) {
   const value = {
     agents, workers, leads, setLeads, attendance, setAttendance, installations,
     maintenance, setMaintenance, setMaintenanceLocal, addTicket, assignTicket,
-    applications, addApplication, completeApplicationStep, decideApplicationApproval, customers,
+    applications, addApplication, completeApplicationStep, decideApplicationApproval, updateApplicationCommercial, uploadApplicationOcr, assignInstallation, customers,
     users, addUser, updateAgentRouting, updateUserProfile, softDeleteUser, restoreUser,
-    visits, addVisit, uploadPhoto,
-    autoAssignLeads, assignLead, updateLead, importLeads, refreshLeads, loading, error,
+    visits, addVisit, uploadPhoto, holidays, addHoliday, removeHoliday,
+    autoAssignLeads, assignLead, transferLeadLocation, updateLead, importLeads, refreshLeads, loading, error,
   }
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>
 }

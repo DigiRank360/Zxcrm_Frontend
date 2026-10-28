@@ -1,3 +1,4 @@
+import { DOCUMENT_TYPES } from '../utils/documentTypes'
 import { useEffect, useState } from 'react'
 import { Download, Save, Upload } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
@@ -9,8 +10,10 @@ export default function MyProfile() {
   const { token, user } = useAuth()
   const [profile, setProfile] = useState(null)
   const [bank, setBank] = useState({ accountHolder: '', bankName: '', accountNumber: '', ifsc: '' })
-  const [documentCategory, setDocumentCategory] = useState('Identity proof')
+  const [documentCategory, setDocumentCategory] = useState(DOCUMENT_TYPES[0])
   const [documentFile, setDocumentFile] = useState(null)
+  const [personal, setPersonal] = useState({ presentAddress: '', temporaryAddress: '', fatherName: '', motherName: '', dateOfBirth: '' })
+  const [savingPersonal, setSavingPersonal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [savingBank, setSavingBank] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -21,6 +24,13 @@ export default function MyProfile() {
     apiRequest('/api/hr/me', { token }).then((result) => {
       if (!active) return
       setProfile(result)
+      setPersonal({
+        presentAddress: result.presentAddress || '',
+        temporaryAddress: result.temporaryAddress || '',
+        fatherName: result.fatherName || '',
+        motherName: result.motherName || '',
+        dateOfBirth: result.dateOfBirth || '',
+      })
       setBank(result.bankDetails || { accountHolder: '', bankName: '', accountNumber: '', ifsc: '' })
     }).catch((requestError) => {
       if (active) setError(requestError.message)
@@ -29,6 +39,22 @@ export default function MyProfile() {
     })
     return () => { active = false }
   }, [token])
+
+  const savePersonal = async (event) => {
+    event.preventDefault()
+    setSavingPersonal(true)
+    setError('')
+    try {
+      const result = await apiRequest('/api/hr/me/personal-details', {
+        method: 'PATCH', token, body: JSON.stringify(personal),
+      })
+      setPersonal(result)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSavingPersonal(false)
+    }
+  }
 
   const saveBank = async (event) => {
     event.preventDefault()
@@ -97,6 +123,38 @@ export default function MyProfile() {
       <PageHeader eyebrow="My account" title="My profile & documents" subtitle={`${user.name} · update bank details and upload private employee documents.`} />
       {error && <p role="alert" className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
       {loading ? <div className="card text-sm text-slate-500">Loading your profile…</div> : <>
+        <section className="card mb-6">
+          <h2 className="section-title">Employee details</h2>
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div><dt className="text-xs font-semibold text-slate-500">Employee ID</dt><dd className="font-semibold">{profile?.employee?.reference || '—'}</dd></div>
+            <div><dt className="text-xs font-semibold text-slate-500">Name</dt><dd className="font-semibold">{profile?.employee?.name}</dd></div>
+            <div><dt className="text-xs font-semibold text-slate-500">Mobile number</dt><dd className="font-semibold">{profile?.employee?.phone || '—'}</dd></div>
+            <div><dt className="text-xs font-semibold text-slate-500">Email ID</dt><dd className="font-semibold">{profile?.employee?.email || '—'}</dd></div>
+          </dl>
+        </section>
+
+        <form onSubmit={savePersonal} className="card mb-6">
+          <h2 className="section-title">Personal details</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-600">Present address
+              <input maxLength={300} className="input mt-1" value={personal.presentAddress} onChange={(event) => setPersonal((current) => ({ ...current, presentAddress: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Temporary address
+              <input maxLength={300} className="input mt-1" value={personal.temporaryAddress} onChange={(event) => setPersonal((current) => ({ ...current, temporaryAddress: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Father name
+              <input maxLength={300} className="input mt-1" value={personal.fatherName} onChange={(event) => setPersonal((current) => ({ ...current, fatherName: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Mother name
+              <input maxLength={300} className="input mt-1" value={personal.motherName} onChange={(event) => setPersonal((current) => ({ ...current, motherName: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Date of birth
+              <input type="date" maxLength={300} className="input mt-1" value={personal.dateOfBirth} onChange={(event) => setPersonal((current) => ({ ...current, dateOfBirth: event.target.value }))} />
+            </label>
+          </div>
+          <button disabled={savingPersonal} className="btn-primary mt-4"><Save size={16} /> {savingPersonal ? 'Saving…' : 'Save personal details'}</button>
+        </form>
+
         <form onSubmit={saveBank} className="card mb-6">
           <h2 className="section-title">Bank account details</h2>
           <p className="mb-4 text-xs text-slate-500">Only you and HR can access these details. The account number is encrypted in storage. Never enter a PIN, CVV, OTP, or password.</p>
@@ -123,8 +181,7 @@ export default function MyProfile() {
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-xs font-semibold text-slate-600">Document type
               <select className="input mt-1" value={documentCategory} onChange={(event) => setDocumentCategory(event.target.value)}>
-                <option>Identity proof</option>
-                <option>Bank proof</option>
+                {DOCUMENT_TYPES.map((type) => <option key={type}>{type}</option>)}
               </select>
             </label>
             <label className="text-xs font-semibold text-slate-600">Choose a document

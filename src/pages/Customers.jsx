@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search, UserRound } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import Badge from '../components/Badge'
@@ -10,7 +11,8 @@ export default function Customers() {
   const { token } = useAuth()
   const [customers, setCustomers] = useState([])
   const [query, setQuery] = useState('')
-  const [selectedId, setSelectedId] = useState('')
+  const [params] = useSearchParams()
+  const [selectedId, setSelectedId] = useState(params.get('customer') || '')
   const [error, setError] = useState('')
 
   useEffect(() => {

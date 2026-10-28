@@ -34,13 +34,16 @@ const emptyApplication = {
   division: "",
   subDivision: "",
   approvedCapacity: "",
-  subsidyAmount: "",
   existingCapacity: "",
   installedCapacity: "",
   state: "",
   city: "",
   village: "",
   pinCode: "",
+  totalPlantCost: "",
+  subsidyAmount: "",
+  paymentTerms: "",
+  advancePayment: "",
 };
 
 const backendWorkflowStages = [
@@ -90,12 +93,20 @@ const applicationSections = [
     ],
   },
   {
-    title: "Capacity & subsidy",
+    title: "Capacity",
     fields: [
       { key: "approvedCapacity", label: "Approved capacity (kWp)", placeholder: "e.g. 5.000", type: "number", required: true },
-      { key: "subsidyAmount", label: "Subsidy amount (Rs)", placeholder: "e.g. 78000", type: "number" },
       { key: "existingCapacity", label: "Existing installed capacity (kWp)", placeholder: "e.g. 0.000", type: "number" },
       { key: "installedCapacity", label: "Installed PV capacity (kWp)", placeholder: "e.g. 5.000", type: "number" },
+    ],
+  },
+  {
+    title: "Plant cost & payment",
+    fields: [
+      { key: "totalPlantCost", label: "Total plant cost (Rs)", placeholder: "e.g. 300000", type: "number" },
+      { key: "subsidyAmount", label: "Subsidy amount (Rs)", placeholder: "e.g. 78000", type: "number" },
+      { key: "paymentTerms", label: "Payment terms", placeholder: "Select or type terms", list: "payment-terms-options" },
+      { key: "advancePayment", label: "Advance payment (Rs)", placeholder: "e.g. 50000", type: "number" },
     ],
   },
   {
@@ -117,7 +128,6 @@ const detailFields = [
   ["Sub division", "subDivision"],
   ["Approved capacity (kWp)", "approvedCapacity"],
   ["Application number", "applicationNumber"],
-  ["Subsidy amount (Rs)", "subsidyAmount"],
   ["Existing installed capacity (kWp)", "existingCapacity"],
   ["Installed PV capacity (kWp)", "installedCapacity"],
   ["State", "state"],
@@ -125,6 +135,133 @@ const detailFields = [
   ["Village", "village"],
   ["Pin code", "pinCode"],
 ];
+
+const paymentTermOptions = [
+  "100% advance",
+  "50% advance, 50% on commissioning",
+  "30% advance, 60% on installation, 10% after commissioning",
+  "Bank loan / finance",
+];
+
+const rupees = (value) => (value === "" || value === undefined || value === null ? "—" : `₹${Number(value).toLocaleString("en-IN")}`);
+
+function ApplicationCommercial({ application }) {
+  const { updateApplicationCommercial, uploadApplicationOcr } = useCrm();
+  const { token } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({});
+  const [file, setFile] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const balance = application.totalPlantCost === "" || application.totalPlantCost === undefined
+    ? null
+    : Number(application.totalPlantCost) - Number(application.advancePayment || 0);
+
+  const startEdit = () => {
+    setForm({
+      totalPlantCost: application.totalPlantCost ?? "",
+      subsidyAmount: application.subsidyAmount ?? "",
+      paymentTerms: application.paymentTerms || "",
+      advancePayment: application.advancePayment ?? "",
+    });
+    setError("");
+    setEditing(true);
+  };
+
+  const run = async (work) => {
+    setBusy(true);
+    setError("");
+    try {
+      await work();
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = (event) => {
+    event.preventDefault();
+    return run(async () => {
+      await updateApplicationCommercial(application.id, form);
+      setEditing(false);
+    });
+  };
+
+  const upload = () => run(async () => {
+    await uploadApplicationOcr(application.id, file);
+    setFile(null);
+  });
+
+  const view = () => run(async () => {
+    const result = await apiRequest(`/api/applications/${application.id}/ocr-document/download`, { token });
+    window.open(result.url, "_blank", "noopener,noreferrer");
+  });
+
+  const fields = [
+    ["totalPlantCost", "Total plant cost (Rs)", "number"],
+    ["subsidyAmount", "Subsidy amount (Rs)", "number"],
+    ["paymentTerms", "Payment terms", "text"],
+    ["advancePayment", "Advance payment (Rs)", "number"],
+  ];
+
+  return (
+    <div className="mt-6 border-t border-slate-100 pt-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="section-title">Plant cost & payment</h3>
+        {!editing && <button type="button" className="btn-outline !px-3 !py-1.5 text-xs" onClick={startEdit}>Edit</button>}
+      </div>
+      {error && <p role="alert" className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{error}</p>}
+      {editing ? (
+        <form onSubmit={save} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {fields.map(([key, label, type]) => (
+            <label key={key} className="text-xs font-semibold text-slate-500">{label}
+              <input
+                type={type}
+                min={type === "number" ? 0 : undefined}
+                step={type === "number" ? "any" : undefined}
+                maxLength={type === "text" ? 200 : undefined}
+                list={key === "paymentTerms" ? "payment-terms-options" : undefined}
+                className="input mt-1"
+                value={form[key]}
+                onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+              />
+            </label>
+          ))}
+          <div className="flex gap-2 sm:col-span-2 xl:col-span-4">
+            <button className="btn-primary" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+            <button type="button" className="btn-outline" onClick={() => setEditing(false)}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="text-sm"><dt className="font-semibold text-brand-700">Total plant cost</dt><dd>{rupees(application.totalPlantCost)}</dd></div>
+          <div className="text-sm"><dt className="font-semibold text-brand-700">Subsidy</dt><dd>{rupees(application.subsidyAmount)}</dd></div>
+          <div className="text-sm"><dt className="font-semibold text-brand-700">Payment terms</dt><dd>{application.paymentTerms || "—"}</dd></div>
+          <div className="text-sm"><dt className="font-semibold text-brand-700">Advance payment</dt><dd>{rupees(application.advancePayment)}</dd></div>
+          <div className="text-sm"><dt className="font-semibold text-brand-700">Balance after advance</dt><dd>{balance === null ? "—" : rupees(balance)}</dd></div>
+        </dl>
+      )}
+      <div className="mt-5">
+        <h3 className="section-title">OCR document</h3>
+        {application.ocrDocument ? (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-800">{application.ocrDocument.fileName}</p>
+              <p className="text-xs text-slate-500">OCR {application.ocrDocument.ocrStatus} · {fmtDateTime(application.ocrDocument.uploadedAt)} · {application.ocrDocument.uploadedBy}</p>
+            </div>
+            <button type="button" className="btn-outline !px-2.5 !py-1.5 text-xs" disabled={busy} onClick={view}><Download size={14} /> View</button>
+          </div>
+        ) : <p className="mb-3 text-sm text-slate-500">No file uploaded yet.</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={(event) => setFile(event.target.files?.[0] || null)} className="max-w-[240px] text-xs" />
+          <button type="button" className="btn-primary" disabled={!file || busy} onClick={upload}><Upload size={15} /> {busy ? "Uploading…" : application.ocrDocument ? "Replace file" : "Upload file"}</button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">PDF, JPEG or PNG up to 7 MB, stored privately in Cloudinary.</p>
+      </div>
+    </div>
+  );
+}
 
 function getCurrentStage(steps) {
   return steps.findIndex((step) => !step.completedAt);
@@ -327,6 +464,8 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
         </dl>
       </div>
 
+      <ApplicationCommercial application={application} />
+
       {!complete && (
         <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -387,8 +526,9 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
 export default function Installations() {
   const { user, token } = useAuth();
   const isAdmin = user.role === "admin";
-  const { installations, applications, addApplication, completeApplicationStep, decideApplicationApproval, users } = useCrm();
+  const { installations, applications, addApplication, uploadApplicationOcr, completeApplicationStep, decideApplicationApproval, users } = useCrm();
   const [applicationForm, setApplicationForm] = useState(emptyApplication);
+  const [ocrFile, setOcrFile] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [showApplicationForm, setShowApplicationForm] = useState(false);
   const [error, setError] = useState("");
@@ -418,6 +558,14 @@ export default function Installations() {
     };
     try {
       const created = await addApplication(application);
+      if (ocrFile) {
+        try {
+          await uploadApplicationOcr(created.id, ocrFile);
+        } catch (uploadError) {
+          setError(`Application created, but the OCR file was not uploaded: ${uploadError.message}`);
+        }
+      }
+      setOcrFile(null);
       setSelectedId(created.id);
       setApplicationForm(emptyApplication);
       setShowApplicationForm(false);
@@ -501,6 +649,7 @@ export default function Installations() {
       </PageHeader>
       {error && <p role="alert" className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
 
+      <datalist id="payment-terms-options">{paymentTermOptions.map((option) => <option key={option} value={option} />)}</datalist>
       <section className="mb-8">
         {!isAdmin && showApplicationForm && (
           <form onSubmit={submitApplication} className="card mb-5">
@@ -549,6 +698,7 @@ export default function Installations() {
                               type={type || "text"}
                               min={type === "number" ? 0 : undefined}
                               step={type === "number" ? "any" : undefined}
+                              list={field.list}
                               pattern={field.pattern}
                               inputMode={field.inputMode}
                               className="input mt-1"
@@ -563,6 +713,16 @@ export default function Installations() {
                   </div>
                 </fieldset>
               ))}
+              <fieldset className="min-w-0">
+                <legend className="mb-3 text-sm font-bold text-slate-800">OCR upload file</legend>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  className="input"
+                  onChange={(event) => setOcrFile(event.target.files?.[0] || null)}
+                />
+                <p className="mt-1 text-xs text-slate-500">Optional. PDF, JPEG or PNG up to 7 MB, stored privately in Cloudinary against this application.</p>
+              </fieldset>
             </div>
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
