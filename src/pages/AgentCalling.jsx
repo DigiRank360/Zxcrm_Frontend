@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Phone, CalendarClock, AlertCircle, PhoneCall, Clock, UserRound, CheckCircle2, X, MapPin } from 'lucide-react'
+import { Phone, CalendarClock, AlertCircle, PhoneCall, Clock, UserRound, CheckCircle2, X, MapPin, ArrowRightLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
@@ -48,7 +48,7 @@ const accent = { overdue: 'border-l-rose-500', today: 'border-l-amber-500', new:
 const tone = { overdue: 'bg-rose-50 text-rose-700', today: 'bg-amber-50 text-amber-700', new: 'bg-brand-50 text-brand-700', scheduled: 'bg-slate-100 text-slate-600', open: 'bg-slate-100 text-slate-600' }
 
 export default function AgentCalling() {
-  const { leads, updateLead, attendance } = useCrm()
+  const { leads, updateLead, attendance, agents, assignLead } = useCrm()
   const { user } = useAuth()
   const att = attendance.find((a) => a.date === istDate() && (a.userId ? a.userId === user.id : a.employee === user.name))
   const working = !!att?.checkIn && !att?.checkOut
@@ -59,7 +59,8 @@ export default function AgentCalling() {
   const [saved, setSaved] = useState('')
   const [editing, setEditing] = useState(null)
   const [editSaving, setEditSaving] = useState(false)
-
+  const [transferTargets, setTransferTargets] = useState({})
+  const [transferringId, setTransferringId] = useState('')
   const queue = useMemo(() => {
     const now = new Date()
     return leads
@@ -128,6 +129,24 @@ export default function AgentCalling() {
       setError(requestError.message)
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  const transfer = async (lead) => {
+    const agentId = transferTargets[lead.id]
+    const target = agents.find((agent) => agent.id === agentId)
+    if (!target) return
+    setTransferringId(lead.id)
+    setError('')
+    setSaved('')
+    try {
+      await assignLead(lead.id, target.id)
+      setSaved(`${lead.name} transferred to ${target.name}.`)
+      setTransferTargets((current) => ({ ...current, [lead.id]: '' }))
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setTransferringId('')
     }
   }
 
@@ -249,6 +268,28 @@ export default function AgentCalling() {
                 {l.customerId && (
                   <Link to={`/customers?customer=${l.customerId}`} title="Customer record" aria-label="Customer record" className="btn-outline !px-3"><UserRound size={16} /></Link>
                 )}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+                <select
+                  aria-label={`Transfer ${l.name} to employee`}
+                  className="input min-w-0 flex-1"
+                  value={transferTargets[l.id] || ''}
+                  onChange={(event) => setTransferTargets((current) => ({ ...current, [l.id]: event.target.value }))}
+                  disabled={transferringId === l.id || agents.filter((agent) => agent.id !== user.id).length === 0}
+                >
+                  <option value="">Transfer lead to…</option>
+                  {agents.filter((agent) => agent.id !== user.id).map((agent) => (
+                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  disabled={!transferTargets[l.id] || transferringId === l.id}
+                  onClick={() => transfer(l)}
+                >
+                  <ArrowRightLeft size={15} /> {transferringId === l.id ? 'Transferring…' : 'Transfer lead'}
+                </button>
               </div>
             </div>
           </article>

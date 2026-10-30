@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle, ArrowRight, CalendarClock, CalendarDays, CheckCircle2, ClipboardList,
@@ -34,9 +34,23 @@ function greeting(now) {
 
 export default function EmployeeDashboard() {
   const { user } = useAuth()
-  const { leads, attendance, applications, holidays } = useCrm()
+  const { leads, attendance, applications, holidays, refreshLeads } = useCrm()
+  const [refreshError, setRefreshError] = useState('')
   const now = useNow()
   const todayDate = istDate()
+
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        await refreshLeads()
+        setRefreshError('')
+      } catch (error) {
+        setRefreshError(error.message)
+      }
+    }
+    const timer = window.setInterval(refresh, 20000)
+    return () => window.clearInterval(timer)
+  }, [refreshLeads])
 
   const { mine, open, overdue, dueToday, upcoming } = useMemo(() => {
     const own = leads.filter((l) => l.agentId === user.id)
@@ -71,6 +85,8 @@ export default function EmployeeDashboard() {
       <PageHeader eyebrow="Employee" title={`${greeting(now)}, ${user.name}`} subtitle={dateLabel}>
         <Link to="/my-calls" className="btn-primary"><PhoneCall size={16} /> Open call queue</Link>
       </PageHeader>
+
+      {refreshError && <p role="alert" className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">Could not refresh assigned leads: {refreshError}</p>}
 
       {(todayHoliday || overdue.length > 0) && (
         <div className="mb-5 space-y-2">

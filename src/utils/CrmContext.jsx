@@ -14,6 +14,7 @@ export function CrmProvider({ children }) {
   const [applications, setApplicationsState] = useState([])
   const [customers, setCustomers] = useState([])
   const [users, setUsers] = useState([])
+  const [agents, setAgents] = useState([])
   const [visits, setVisits] = useState([])
   const [holidays, setHolidays] = useState([])
   const [loadedToken, setLoadedToken] = useState('')
@@ -43,6 +44,7 @@ export function CrmProvider({ children }) {
         setApplicationsState(data.applications || [])
         setCustomers(data.customers || [])
         setUsers(data.users || [])
+        setAgents(data.agents || (data.users || []).filter((item) => item.role === 'employee' && item.active !== false))
         setVisits(data.visits || [])
         setHolidays(data.holidays || [])
         stateRef.current = { ...stateRef.current, applications: data.applications || [] }
@@ -295,7 +297,6 @@ export function CrmProvider({ children }) {
     return result
   }
 
-  const agents = users.filter((user) => user.role === 'employee' && user.active !== false)
   const workers = users.filter((user) => user.role === 'technician' && user.active !== false)
   const value = {
     agents, workers, leads, setLeads, attendance, setAttendance, installations,
