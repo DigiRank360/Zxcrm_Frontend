@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { apiRequest } from './api'
 
 const AuthContext = createContext(null)
@@ -33,12 +33,12 @@ export function AuthProvider({ children }) {
     setUser(result.user)
     setToken(result.token)
   }
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('crm_user')
     localStorage.removeItem('crm_token')
     setUser(null)
     setToken('')
-  }
+  }, [])
   return <AuthContext.Provider value={{ user, token, login, logout }}>{children}</AuthContext.Provider>
 }
 

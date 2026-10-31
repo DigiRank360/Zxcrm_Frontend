@@ -60,13 +60,13 @@ export default function EmployeeDashboard() {
     return {
       mine: own,
       open: active,
-      overdue: scheduled.filter((l) => day(l) < todayDate),
+      overdue: scheduled.filter((l) => l.status !== 'Interested' && day(l) < todayDate),
       dueToday: scheduled.filter((l) => day(l) === todayDate),
       upcoming: scheduled.filter((l) => day(l) > todayDate),
     }
   }, [leads, user.id, todayDate])
 
-  const today = attendance.find((a) => a.date === todayDate && (a.userId ? a.userId === user.id : a.employee === user.name))
+  const todaySessions = attendance.filter((a) => a.date === todayDate && (a.userId ? a.userId === user.id : a.employee === user.name))
   const todayHoliday = holidays.find((h) => h.date === todayDate)
   const nextHoliday = holidays.find((h) => h.date > todayDate)
   const myApplications = applications.filter((a) => a.assignedEmployeeId === user.id)
@@ -109,7 +109,7 @@ export default function EmployeeDashboard() {
         <StatCard label="Assigned leads" value={mine.length} icon={Users} />
         <StatCard label="Pending calls" value={pendingCalls} icon={PhoneCall} tone="amber" />
         <StatCard label="Converted" value={mine.filter((l) => l.status === 'Converted').length} icon={CheckCircle2} tone="green" />
-        <StatCard label="Hours today" value={(workedSeconds(today, now) / 3600).toFixed(1)} icon={Clock} tone="green" />
+        <StatCard label="Hours today" value={(todaySessions.reduce((total, session) => total + workedSeconds(session, now), 0) / 3600).toFixed(1)} icon={Clock} tone="green" />
       </div>
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3">
@@ -151,7 +151,7 @@ export default function EmployeeDashboard() {
           </section>
           <section className="card">
             <h2 className="mb-2 flex items-center gap-2 font-bold text-slate-900"><CalendarDays size={18} /> Attendance</h2>
-            <p className="text-sm text-slate-600">Today: <b>{todayHoliday ? 'Holiday' : today?.status || 'Not checked in'}</b></p>
+            <p className="text-sm text-slate-600">Today: <b>{todayHoliday ? 'Holiday' : todaySessions[0]?.status || 'Not checked in'}</b></p>
             <p className="mt-1 text-sm text-slate-600">Next holiday: <b>{nextHoliday ? `${nextHoliday.name} (${nextHoliday.date})` : 'None scheduled'}</b></p>
             <Link to="/attendance" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand-600">Records & calendar <ArrowRight size={14} /></Link>
           </section>

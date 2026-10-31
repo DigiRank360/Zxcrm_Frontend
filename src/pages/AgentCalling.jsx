@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Phone, CalendarClock, AlertCircle, PhoneCall, Clock, UserRound, CheckCircle2, X, MapPin, ArrowRightLeft } from 'lucide-react'
+import { Phone, CalendarClock, AlertCircle, PhoneCall, Clock, UserRound, CheckCircle2, X, MapPin, ArrowRightLeft, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
@@ -27,7 +27,9 @@ function classify(lead, now) {
   const validDue = due && !Number.isNaN(due.getTime()) ? due : null
   if (validDue) {
     const isDateOnly = !String(lead.followUp).includes('T')
-    if (isDateOnly ? localDate(validDue) < localDate(now) : validDue < now) return { key: 'overdue', label: 'Overdue', rank: 0 }
+    const isPastDue = isDateOnly ? localDate(validDue) < localDate(now) : validDue < now
+    if (isPastDue && lead.status === 'Interested') return { key: 'interested', label: 'Follow-up', rank: 4 }
+    if (isPastDue) return { key: 'overdue', label: 'Overdue', rank: 0 }
     if (localDate(validDue) === localDate(now)) return { key: 'today', label: 'Due today', rank: 1 }
   }
   if (lead.status === 'New') return { key: 'new', label: 'Not called yet', rank: 2 }
@@ -44,14 +46,18 @@ const tabs = [
   { key: 'all', label: 'All' },
 ]
 
-const accent = { overdue: 'border-l-rose-500', today: 'border-l-amber-500', new: 'border-l-brand-500', scheduled: 'border-l-slate-300', open: 'border-l-slate-200' }
-const tone = { overdue: 'bg-rose-50 text-rose-700', today: 'bg-amber-50 text-amber-700', new: 'bg-brand-50 text-brand-700', scheduled: 'bg-slate-100 text-slate-600', open: 'bg-slate-100 text-slate-600' }
+const accent = { overdue: 'border-l-rose-500', today: 'border-l-amber-500', new: 'border-l-brand-500', scheduled: 'border-l-slate-300', open: 'border-l-slate-200', interested: 'border-l-emerald-400' }
+const tone = { overdue: 'bg-rose-50 text-rose-700', today: 'bg-amber-50 text-amber-700', new: 'bg-brand-50 text-brand-700', scheduled: 'bg-slate-100 text-slate-600', open: 'bg-slate-100 text-slate-600', interested: 'bg-emerald-50 text-emerald-700' }
 
 export default function AgentCalling() {
-  const { leads, updateLead, attendance, agents, assignLead } = useCrm()
+  const { leads, updateLead, createManualLead, attendance, agents, assignLead } = useCrm()
   const { user } = useAuth()
-  const att = attendance.find((a) => a.date === istDate() && (a.userId ? a.userId === user.id : a.employee === user.name))
-  const working = !!att?.checkIn && !att?.checkOut
+  const working = attendance.some((a) =>
+    a.date === istDate() &&
+    (a.userId ? a.userId === user.id : a.employee === user.name) &&
+    a.checkIn &&
+    !a.checkOut
+  )
   const [draft, setDraft] = useState({})
   const [tab, setTab] = useState('pending')
   const [savingId, setSavingId] = useState('')
@@ -61,6 +67,9 @@ export default function AgentCalling() {
   const [editSaving, setEditSaving] = useState(false)
   const [transferTargets, setTransferTargets] = useState({})
   const [transferringId, setTransferringId] = useState('')
+  const [showNewLeadForm, setShowNewLeadForm] = useState(false)
+  const [newLeadSaving, setNewLeadSaving] = useState(false)
+  const [newLead, setNewLead] = useState({ name: '', phone: '', email: '', state: '', city: '', propertyType: '', notes: '' })
   const queue = useMemo(() => {
     const now = new Date()
     return leads
@@ -74,6 +83,24 @@ export default function AgentCalling() {
   const visible = queue.filter(({ group }) => tab === 'all' || (tab === 'pending' ? ['overdue', 'today', 'new'].includes(group.key) : group.key === tab))
 
   const upd = (id, k, v) => setDraft((p) => ({ ...p, [id]: { ...p[id], [k]: v } }))
+
+  const createLead = async (event) => {
+    event.preventDefault()
+    setNewLeadSaving(true)
+    setError('')
+    setSaved('')
+    try {
+      const lead = await createManualLead(newLead)
+      setSaved(`Lead added to your call queue: ${lead.name}.`)
+      setNewLead({ name: '', phone: '', email: '', state: '', city: '', propertyType: '', notes: '' })
+      setShowNewLeadForm(false)
+      setTab('pending')
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setNewLeadSaving(false)
+    }
+  }
 
   const save = async (lead) => {
     const d = draft[lead.id] || {}
@@ -152,12 +179,55 @@ export default function AgentCalling() {
 
   return (
     <>
-      <PageHeader eyebrow="Agent" title="My Call Queue" subtitle="Leads assigned to you, ordered by what needs a call first" />
+      <PageHeader eyebrow="Agent" title="My Call Queue" subtitle="Leads assigned to you, ordered by what needs a call first">
+        <button type="button" className="btn-primary" onClick={() => { setError(''); setShowNewLeadForm((open) => !open) }}>
+          {showNewLeadForm ? <X size={16} /> : <Plus size={16} />}
+          {showNewLeadForm ? 'Cancel' : 'New lead'}
+        </button>
+      </PageHeader>
       {!working && (
         <div className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <AlertCircle size={18} /> Check in to start logging calls.
+          <AlertCircle size={18} /> You are not checked in. Call logs can still be saved.
           <Link to="/attendance" className="ml-auto font-semibold underline">Go to Attendance</Link>
         </div>
+      )}
+      {showNewLeadForm && (
+        <form onSubmit={createLead} className="card mb-5">
+          <h2 className="section-title mb-4">Add a new lead</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="text-xs font-semibold text-slate-600">Name <span className="text-rose-500">*</span>
+              <input required maxLength={150} className="input mt-1" value={newLead.name} onChange={(event) => setNewLead((current) => ({ ...current, name: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Phone <span className="text-rose-500">*</span>
+              <input required type="tel" maxLength={40} className="input mt-1" value={newLead.phone} onChange={(event) => setNewLead((current) => ({ ...current, phone: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Email
+              <input type="email" maxLength={200} className="input mt-1" value={newLead.email} onChange={(event) => setNewLead((current) => ({ ...current, email: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">State
+              <select className="input mt-1" value={newLead.state} onChange={(event) => setNewLead((current) => ({ ...current, state: event.target.value, city: '' }))}>
+                <option value="">Select state</option>
+                {states.map((option) => <option key={option}>{option}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-600">City
+              <select className="input mt-1" value={newLead.city} onChange={(event) => setNewLead((current) => ({ ...current, city: event.target.value }))} disabled={!newLead.state}>
+                <option value="">Select city</option>
+                {(stateCities[newLead.state] || []).map((option) => <option key={option}>{option}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Property type
+              <input maxLength={200} className="input mt-1" value={newLead.propertyType} onChange={(event) => setNewLead((current) => ({ ...current, propertyType: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600 sm:col-span-2 lg:col-span-3">Notes
+              <textarea rows={3} maxLength={500} className="input mt-1 resize-y" value={newLead.notes} onChange={(event) => setNewLead((current) => ({ ...current, notes: event.target.value }))} />
+            </label>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button type="submit" className="btn-primary" disabled={newLeadSaving}>{newLeadSaving ? 'Adding…' : 'Add to my queue'}</button>
+            <button type="button" className="btn-outline" onClick={() => setShowNewLeadForm(false)} disabled={newLeadSaving}>Cancel</button>
+          </div>
+        </form>
       )}
       <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Pending calls" value={pendingCount} icon={PhoneCall} />
@@ -263,7 +333,7 @@ export default function AgentCalling() {
               </div>
               <textarea aria-label="Call notes" className="input mt-2 min-h-16 resize-y" rows={2} maxLength={500} placeholder="Call notes" value={draft[l.id]?.notes ?? l.notes ?? ''} onChange={(e) => upd(l.id, 'notes', e.target.value)} />
               <div className="mt-3 flex items-center gap-2">
-                <button type="button" className="btn-primary flex-1" disabled={!working || savingId === l.id} onClick={() => save(l)}>{savingId === l.id ? 'Saving…' : 'Save call log'}</button>
+                <button type="button" className="btn-primary flex-1" disabled={savingId === l.id} onClick={() => save(l)}>{savingId === l.id ? 'Saving…' : 'Save call log'}</button>
                 <button type="button" className="btn-outline" onClick={() => startEdit(l)}>Edit</button>
                 {l.customerId && (
                   <Link to={`/customers?customer=${l.customerId}`} title="Customer record" aria-label="Customer record" className="btn-outline !px-3"><UserRound size={16} /></Link>

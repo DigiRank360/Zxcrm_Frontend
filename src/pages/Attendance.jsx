@@ -27,6 +27,8 @@ export default function Attendance() {
   const presentDays = new Set(monthRows.filter((r) => ['Present', 'On-field'].includes(r.status)).map((r) => r.date)).size
   const monthHolidays = holidays.filter((item) => item.date.startsWith(today.slice(0, 7))).length
   const total = todayRows.reduce((s, a) => s + workedSeconds(a, now) / 3600, 0)
+  const todayStaff = new Set(todayRows.map((row) => row.userId || row.employee))
+  const presentStaff = new Set(todayRows.filter((row) => ['Present', 'On-field'].includes(row.status)).map((row) => row.userId || row.employee))
 
   const columns = [
     { key: 'employee', label: 'Employee', render: (r) => <Person name={r.employee} /> },
@@ -50,8 +52,8 @@ export default function Attendance() {
       {!isAdmin && <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Attendance is not yet restricted to a 10 m location radius. Configure the office or site coordinates before enabling location verification.</p>}
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <StatCard label="Total hours today" value={total.toFixed(1)} icon={Clock} />
-        <StatCard label="Present / On-field" value={todayRows.filter((r) => ['Present', 'On-field'].includes(r.status)).length} icon={UserCheck} tone="green" />
-        <StatCard label="Avg hours" value={(todayRows.length ? total / todayRows.length : 0).toFixed(1)} icon={Timer} tone="amber" />
+        <StatCard label="Present / On-field" value={presentStaff.size} icon={UserCheck} tone="green" />
+        <StatCard label="Avg hours" value={(todayStaff.size ? total / todayStaff.size : 0).toFixed(1)} icon={Timer} tone="amber" />
       </div>
       {!isAdmin && (
         <div className="mb-6 grid gap-4 sm:grid-cols-3">

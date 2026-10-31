@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { apiRequest } from './api'
 import { useAuth } from './AuthContext'
+import { istDate, istTime } from './helpers'
 import { documentToDataUrl, fileToDataUrl } from './uploads'
 
 const CrmContext = createContext(null)
 
 export function CrmProvider({ children }) {
-  const { user, token } = useAuth()
+  const { user, token, logout } = useAuth()
   const [leads, setLeadsState] = useState([])
   const [attendance, setAttendanceState] = useState([])
   const [installations, setInstallationsState] = useState([])
@@ -55,7 +56,7 @@ export function CrmProvider({ children }) {
     return () => { active = false }
   }, [user, token])
 
-  const updateResource = (resource, setState, update) => {
+  const updateResource = useCallback((resource, setState, update) => {
     const current = stateRef.current[resource]
     const next = typeof update === 'function' ? update(current) : update
     stateRef.current = { ...stateRef.current, [resource]: next }
@@ -69,7 +70,7 @@ export function CrmProvider({ children }) {
     writeQueues.current[resource] = write
     write.catch((err) => setError(err.message))
     setError('')
-  }
+  }, [token])
 
   const refreshLeads = useCallback(async () => {
     const data = await apiRequest('/api/crm', { token })
@@ -80,7 +81,36 @@ export function CrmProvider({ children }) {
   }, [token])
 
   const setLeads = (update) => updateResource('leads', setLeadsState, update)
-  const setAttendance = (update) => updateResource('attendance', setAttendanceState, update)
+  const setAttendance = useCallback((update) => updateResource('attendance', setAttendanceState, update), [updateResource])
+  useEffect(() => {
+    if (!user || user.role !== 'employee' || !token) return undefined
+
+    const cutoff = new Date(`${istDate()}T20:30:00+05:30`)
+    const cutoffAt = cutoff.getTime()
+    const timer = window.setTimeout(() => {
+      const today = istDate(cutoff)
+      const row = stateRef.current.attendance.find((item) =>
+        (item.userId ? item.userId === user.id : item.employee === user.name) &&
+        item.date === today &&
+        item.checkIn &&
+        !item.checkOut
+      )
+
+      if (row) {
+        const checkInAt = row.checkInAt
+          ? new Date(row.checkInAt).getTime()
+          : new Date(`${row.date}T${row.checkIn}:00+05:30`).getTime()
+        const checkOutAt = new Date(Math.max(cutoffAt, checkInAt))
+        setAttendance((current) => current.map((item) => item.id === row.id
+          ? { ...item, checkOut: istTime(checkOutAt), checkOutAt: checkOutAt.toISOString() }
+          : item))
+      }
+
+      logout()
+    }, Math.max(0, cutoffAt - Date.now()))
+
+    return () => window.clearTimeout(timer)
+  }, [logout, setAttendance, token, user])
   const setInstallationsLocal = (update) => {
     const next = typeof update === 'function' ? update(stateRef.current.installations) : update
     stateRef.current = { ...stateRef.current, installations: next }
@@ -297,6 +327,16 @@ export function CrmProvider({ children }) {
     return result
   }
 
+  const createManualLead = async (lead) => {
+    const result = await apiRequest('/api/leads/manual', {
+      method: 'POST', token, body: JSON.stringify(lead),
+    })
+    const updatedLeads = [...stateRef.current.leads, result.lead]
+    stateRef.current = { ...stateRef.current, leads: updatedLeads }
+    setLeadsState(updatedLeads)
+    return result.lead
+  }
+
   const workers = users.filter((user) => user.role === 'technician' && user.active !== false)
   const value = {
     agents, workers, leads, setLeads, attendance, setAttendance, installations,
@@ -304,7 +344,7 @@ export function CrmProvider({ children }) {
     applications, addApplication, completeApplicationStep, decideApplicationApproval, updateApplicationCommercial, uploadApplicationOcr, assignInstallation, customers,
     users, addUser, updateAgentRouting, updateUserProfile, softDeleteUser, restoreUser,
     visits, addVisit, uploadPhoto, holidays, addHoliday, removeHoliday,
-    autoAssignLeads, assignLead, transferLeadLocation, updateLead, importLeads, refreshLeads, loading, error,
+    autoAssignLeads, assignLead, transferLeadLocation, updateLead, importLeads, createManualLead, refreshLeads, loading, error,
   }
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>
 }

@@ -8,7 +8,8 @@ import Badge from '../components/Badge'
 export default function Dashboard() {
   const { leads, attendance, maintenance, installations, workers } = useCrm()
   const attendanceToday = attendance.filter((a) => a.date === istDate())
-  const present = attendanceToday.filter((a) => a.status !== 'Absent').length
+  const staffToday = new Set(attendanceToday.map((row) => row.userId || row.employee))
+  const present = new Set(attendanceToday.filter((a) => a.status !== 'Absent').map((row) => row.userId || row.employee))
   const pending = maintenance.filter((m) => m.status === 'Pending')
   const done = maintenance.filter((m) => m.status === 'Completed')
   const upcoming = pending.filter((m) => daysUntil(m.dueDate) <= 3)
@@ -19,7 +20,7 @@ export default function Dashboard() {
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard label="Total Leads" value={leads.length} icon={Users} />
         <StatCard label="Converted" value={leads.filter((l) => l.status === 'Converted').length} icon={PhoneCall} tone="green" />
-        <StatCard label="Staff Present Today" value={`${present}/${attendanceToday.length}`} icon={UserCheck} tone="green" />
+        <StatCard label="Staff Present Today" value={`${present.size}/${staffToday.size}`} icon={UserCheck} tone="green" />
         <StatCard label="Pending Services" value={pending.length} icon={Wrench} tone="amber" />
         <StatCard label="Completed Services" value={done.length} icon={CheckCircle2} tone="green" />
         <StatCard label="Due within 3 days" value={upcoming.length} icon={AlertTriangle} tone="rose" />
