@@ -13,7 +13,9 @@ export default function MyProfile() {
   const [documentCategory, setDocumentCategory] = useState(DOCUMENT_TYPES[0])
   const [documentFile, setDocumentFile] = useState(null)
   const [personal, setPersonal] = useState({ presentAddress: '', temporaryAddress: '', fatherName: '', motherName: '', dateOfBirth: '' })
+  const [contact, setContact] = useState({ name: '', phone: '', contactEmail: '' })
   const [savingPersonal, setSavingPersonal] = useState(false)
+  const [savingContact, setSavingContact] = useState(false)
   const [loading, setLoading] = useState(true)
   const [savingBank, setSavingBank] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -24,6 +26,11 @@ export default function MyProfile() {
     apiRequest('/api/hr/me', { token }).then((result) => {
       if (!active) return
       setProfile(result)
+      setContact({
+        name: result.employee?.name || '',
+        phone: result.employee?.phone || '',
+        contactEmail: result.employee?.contactEmail || '',
+      })
       setPersonal({
         presentAddress: result.presentAddress || '',
         temporaryAddress: result.temporaryAddress || '',
@@ -39,6 +46,24 @@ export default function MyProfile() {
     })
     return () => { active = false }
   }, [token])
+
+  const requestContactUpdate = async (event) => {
+    event.preventDefault()
+    setSavingContact(true)
+    setError('')
+    try {
+      const result = await apiRequest('/api/hr/me/contact-details', {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify(contact),
+      })
+      setProfile((current) => ({ ...current, pendingContactChange: result.pendingContactChange }))
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSavingContact(false)
+    }
+  }
 
   const savePersonal = async (event) => {
     event.preventDefault()
@@ -132,6 +157,33 @@ export default function MyProfile() {
             <div><dt className="text-xs font-semibold text-slate-500">Email ID</dt><dd className="font-semibold">{profile?.employee?.email || '—'}</dd></div>
           </dl>
         </section>
+
+        <form onSubmit={requestContactUpdate} className="card mb-6">
+          <h2 className="section-title">Request contact detail update</h2>
+          <p className="mb-4 text-sm text-slate-500">HR will review these changes. Leave contact email blank if you only want to update your name or phone. Your login ID will not change.</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-600">Name
+              <input required maxLength={100} className="input mt-1" value={contact.name} onChange={(event) => setContact((current) => ({ ...current, name: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Mobile number
+              <input type="tel" maxLength={50} className="input mt-1" value={contact.phone} onChange={(event) => setContact((current) => ({ ...current, phone: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Contact email
+              <input type="email" maxLength={254} className="input mt-1" value={contact.contactEmail} onChange={(event) => setContact((current) => ({ ...current, contactEmail: event.target.value }))} />
+            </label>
+          </div>
+          {profile?.pendingContactChange && (
+            <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              Contact update pending HR review: {profile.pendingContactChange.name}
+            </p>
+          )}
+          {profile?.lastContactChangeReview && (
+            <p className="mt-2 text-xs text-slate-500">
+              Last request was {profile.lastContactChangeReview.decision.toLowerCase()} by HR.
+            </p>
+          )}
+          <button disabled={savingContact} className="btn-primary mt-4"><Save size={16} /> {savingContact ? 'Submitting…' : 'Submit for HR approval'}</button>
+        </form>
 
         <form onSubmit={savePersonal} className="card mb-6">
           <h2 className="section-title">Personal details</h2>

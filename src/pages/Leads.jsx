@@ -7,6 +7,7 @@ import {
   RefreshCw,
   X,
   ArrowRightLeft,
+  ArchiveRestore,
 } from "lucide-react";
 import { Person } from "../components/Avatar";
 import { useCrm } from "../utils/CrmContext";
@@ -28,7 +29,7 @@ const toDateTimeLocal = (value) => {
 };
 
 export default function Leads() {
-  const { leads, agents, importLeads, refreshLeads, updateLead, assignLead } =
+  const { leads, agents, importLeads, refreshLeads, updateLead, assignLead, restoreLead } =
     useCrm();
   const [params] = useSearchParams();
   const [f, setF] = useState({
@@ -37,12 +38,15 @@ export default function Leads() {
     status: "",
     agent: "",
     date: "",
+    archived: "",
   });
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [transferring, setTransferring] = useState(false);
+  const [restoringId, setRestoringId] = useState("");
   const refreshInFlight = useRef(false);
   const fileRef = useRef();
   const editFormRef = useRef(null);
@@ -96,8 +100,23 @@ export default function Leads() {
       (!f.source || l.source === f.source) &&
       (!f.status || l.status === f.status) &&
       (!f.agent || String(l.agentId) === f.agent) &&
-      (!f.date || l.date === f.date),
+      (!f.date || l.date === f.date) &&
+      (!f.archived || (f.archived === "archived" ? Boolean(l.deletedAt) : !l.deletedAt)),
   );
+
+  const onRestore = async (lead) => {
+    setRestoringId(lead.id);
+    setError("");
+    setSaved("");
+    try {
+      await restoreLead(lead.id);
+      setSaved(`${lead.name} restored.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setRestoringId("");
+    }
+  };
 
   const onCsv = async (e) => {
     const input = e.target;
@@ -175,7 +194,12 @@ export default function Leads() {
     {
       key: "status",
       label: "Status",
-      render: (r) => <Badge>{r.status}</Badge>,
+      render: (r) => (
+        <div className="flex flex-col items-start gap-1">
+          <Badge>{r.status}</Badge>
+          {r.deletedAt && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Archived</span>}
+        </div>
+      ),
     },
     {
       key: "agent",
@@ -188,7 +212,16 @@ export default function Leads() {
     {
       key: "actions",
       label: "Actions",
-      render: (r) => (
+      render: (r) => r.deletedAt ? (
+        <button
+          type="button"
+          className="btn-outline !px-2.5 !py-1.5 text-xs"
+          disabled={restoringId === r.id}
+          onClick={() => onRestore(r)}
+        >
+          <ArchiveRestore size={14} /> {restoringId === r.id ? "Restoring…" : "Restore"}
+        </button>
+      ) : (
         <button
           type="button"
           className="btn-outline !px-2.5 !py-1.5 text-xs"
@@ -242,7 +275,7 @@ export default function Leads() {
           </button>
         ))}
       </div>
-      <div className="card mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="card mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="relative">
           <Search
             size={16}
@@ -281,6 +314,11 @@ export default function Leads() {
           value={f.date}
           onChange={set("date")}
         />
+        <select className="input" aria-label="Lead archive filter" value={f.archived} onChange={set("archived")}>
+          <option value="">Active + archived</option>
+          <option value="active">Active leads</option>
+          <option value="archived">Archived leads</option>
+        </select>
       </div>
       {error && (
         <p
@@ -290,6 +328,7 @@ export default function Leads() {
           {error}
         </p>
       )}
+      {saved && <p role="status" className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{saved}</p>}
       {editing && (
         <div ref={editFormRef} className="card mb-4 scroll-mt-4">
           <div className="mb-4 flex items-center justify-between">

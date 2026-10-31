@@ -18,6 +18,11 @@ function EmployeeProfile({ employee, token, onSaved }) {
     joiningDate: employee.joiningDate || '',
     monthlySalary: employee.monthlySalary ?? '',
   })
+  const [account, setAccount] = useState({
+    name: employee.name || '',
+    phone: employee.phone || '',
+    contactEmail: employee.contactEmail || employee.employee?.email || '',
+  })
   const [bank, setBank] = useState({
     accountHolder: employee.bankDetails?.accountHolder || '',
     bankName: employee.bankDetails?.bankName || '',
@@ -28,6 +33,7 @@ function EmployeeProfile({ employee, token, onSaved }) {
   const [documentFile, setDocumentFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [reviewingContact, setReviewingContact] = useState(false)
 
   const save = async (event) => {
     event.preventDefault()
@@ -67,6 +73,45 @@ function EmployeeProfile({ employee, token, onSaved }) {
       setError(requestError.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const saveAccount = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const result = await apiRequest(`/api/hr/employees/${employee.id}/account`, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify(account),
+      })
+      onSaved(employee.id, result)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const reviewContact = async (decision) => {
+    setReviewingContact(true)
+    setError('')
+    try {
+      const result = await apiRequest(`/api/hr/employees/${employee.id}/contact-details/review`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ decision }),
+      })
+      onSaved(employee.id, result)
+      setAccount({
+        name: result.employee.name || '',
+        phone: result.employee.phone || '',
+        contactEmail: result.employee.contactEmail || result.employee.email || '',
+      })
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setReviewingContact(false)
     }
   }
 
@@ -138,6 +183,32 @@ function EmployeeProfile({ employee, token, onSaved }) {
         </div>
         <Badge>{employee.active === false ? 'Inactive' : 'Active'}</Badge>
       </div>
+      <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <h3 className="mb-3 text-sm font-bold text-slate-800">Employee account details</h3>
+        <p className="mb-3 text-xs text-slate-500">HR updates sync to the employee’s My Profile. Contact email does not change the login ID.</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <label className="text-xs font-semibold text-slate-600">Name
+            <input required maxLength={100} className="input mt-1" value={account.name} onChange={(event) => setAccount((current) => ({ ...current, name: event.target.value }))} />
+          </label>
+          <label className="text-xs font-semibold text-slate-600">Mobile number
+            <input maxLength={50} className="input mt-1" value={account.phone} onChange={(event) => setAccount((current) => ({ ...current, phone: event.target.value }))} />
+          </label>
+          <label className="text-xs font-semibold text-slate-600">Contact email
+            <input type="email" maxLength={254} className="input mt-1" value={account.contactEmail} onChange={(event) => setAccount((current) => ({ ...current, contactEmail: event.target.value }))} />
+          </label>
+        </div>
+        <button type="button" disabled={saving} onClick={saveAccount} className="btn-outline mt-3"><Save size={15} /> {saving ? 'Saving…' : 'Save account details'}</button>
+      </div>
+      {employee.pendingContactChange && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <h3 className="text-sm font-bold text-amber-900">Pending employee contact update</h3>
+          <p className="mt-1 text-xs text-amber-800">{employee.pendingContactChange.name} · {employee.pendingContactChange.phone || 'No phone'} · {employee.pendingContactChange.contactEmail || 'No email'}</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" disabled={reviewingContact} onClick={() => reviewContact('Approved')} className="btn-primary !py-2"><Check size={15} /> Approve</button>
+            <button type="button" disabled={reviewingContact} onClick={() => reviewContact('Rejected')} className="btn-outline !py-2">{reviewingContact ? 'Saving…' : 'Reject'}</button>
+          </div>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <label className="text-xs font-semibold text-slate-600">Department
           <input maxLength={100} className="input mt-1" value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} />
@@ -264,7 +335,9 @@ export default function HrPanel() {
   }, [form.employeeId, form.month, token])
 
   const saveProfile = (id, profile) => {
-    setEmployees((current) => current.map((employee) => employee.id === id ? { ...employee, ...profile } : employee))
+    setEmployees((current) => current.map((employee) => employee.id === id
+      ? { ...employee, ...profile, employee: profile.employee ? { ...employee.employee, ...profile.employee } : employee.employee }
+      : employee))
   }
 
   const createPayroll = async (event) => {
@@ -413,6 +486,7 @@ export default function HrPanel() {
             {selectedEmployeeId && employees.find((employee) => employee.id === selectedEmployeeId) && (
               <div className="border-t border-slate-100 bg-slate-50/40">
                 <EmployeeProfile
+                  key={selectedEmployeeId}
                   employee={employees.find((employee) => employee.id === selectedEmployeeId)}
                   token={token}
                   onSaved={saveProfile}

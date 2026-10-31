@@ -4,6 +4,7 @@ const colors = {
   Busy: 'bg-amber-50 text-amber-700 ring-amber-200',
   'Not Picked': 'bg-orange-50 text-orange-700 ring-orange-200',
   'Not Interested': 'bg-rose-50 text-rose-700 ring-rose-200',
+  Other: 'bg-violet-50 text-violet-700 ring-violet-200',
   Converted: 'bg-green-50 text-green-700 ring-green-200',
   Present: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   'Half-day': 'bg-amber-50 text-amber-700 ring-amber-200',

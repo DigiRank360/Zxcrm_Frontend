@@ -433,9 +433,66 @@ function ValuationDocuments({ installation, isAdmin, token }) {
   );
 }
 
-function ApplicationDetails({ application, onCompleteStep, onApproval, approvalNote, setApprovalNote, users, isAdmin }) {
+function ApplicationDetails({
+  application,
+  onCompleteStep,
+  onApproval,
+  onUploadStepDocument,
+  onTransfer,
+  approvalNote,
+  setApprovalNote,
+  users,
+  employees,
+  token,
+  isAdmin,
+}) {
   const currentStage = getCurrentStage(application.steps);
   const complete = currentStage === -1;
+  const [file, setFile] = useState(null);
+  const [transferSelection, setTransferSelection] = useState(null);
+  const transferTo = transferSelection?.applicationId === application.id
+    ? transferSelection.employeeId
+    : application.assignedEmployeeId || "";
+  const [busyAction, setBusyAction] = useState("");
+  const [actionError, setActionError] = useState("");
+
+  const uploadStageDocument = async () => {
+    if (!file || currentStage < 0) return;
+    setBusyAction("upload");
+    setActionError("");
+    try {
+      await onUploadStepDocument(application.id, currentStage, file);
+      setFile(null);
+    } catch (requestError) {
+      setActionError(requestError.message);
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const downloadStageDocument = async (stage, document) => {
+    setActionError("");
+    try {
+      const result = await apiRequest(`/api/applications/${application.id}/steps/${stage}/documents/${document.id}/download`, { token });
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (requestError) {
+      setActionError(requestError.message);
+    }
+  };
+
+  const transferApplication = async (event) => {
+    event.preventDefault();
+    setBusyAction("transfer");
+    setActionError("");
+    try {
+      await onTransfer(application.id, transferTo);
+      setTransferSelection(null);
+    } catch (requestError) {
+      setActionError(requestError.message);
+    } finally {
+      setBusyAction("");
+    }
+  };
 
   return (
     <section className="card mt-5 !p-4 sm:!p-5" aria-label={`Workflow details for ${application.applicationNumber}`}>
@@ -451,6 +508,50 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
       </div>
 
       <WorkflowTimeline application={application} />
+
+      {actionError && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{actionError}</p>}
+      <div className="mt-6 border-t border-slate-100 pt-5">
+        <h3 className="section-title">Workflow stage documents</h3>
+        <p className="mb-3 text-xs text-slate-500">At least one PDF, JPEG, or PNG must be uploaded to each stage before it can be completed.</p>
+        <div className="space-y-2">
+          {application.steps.map((step, index) => {
+            const documents = step.documents || [];
+            return (
+              <details key={`${index}-${backendWorkflowStages[index].title}`} open={index === currentStage} className="rounded-xl border border-slate-200 px-3 py-2">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                  {backendWorkflowStages[index].title} · {documents.length} {documents.length === 1 ? "file" : "files"}
+                  {index === currentStage && <span className="ml-2 text-brand-700">(Current stage)</span>}
+                </summary>
+                <div className="mt-3 space-y-2">
+                  {documents.map((document) => (
+                    <div key={document.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="min-w-0 break-all text-slate-600">{document.fileName} · {document.uploadedBy} · {fmtDateTime(document.uploadedAt)}</span>
+                      <button type="button" className="btn-outline !px-2.5 !py-1 text-xs" onClick={() => downloadStageDocument(index, document)}>
+                        <Download size={13} /> View
+                      </button>
+                    </div>
+                  ))}
+                  {!documents.length && <p className="text-xs text-slate-500">No files uploaded.</p>}
+                  {!isAdmin && index === currentStage && (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                        className="max-w-full text-xs"
+                        onChange={(event) => setFile(event.target.files?.[0] || null)}
+                      />
+                      <button type="button" className="btn-outline !px-3 !py-1.5 text-xs" disabled={!file || busyAction === "upload" || documents.length >= 10} onClick={uploadStageDocument}>
+                        <Upload size={14} /> {busyAction === "upload" ? "Uploading…" : "Upload stage file"}
+                      </button>
+                      <span className="text-xs text-slate-500">PDF, JPEG or PNG; max 7 MB. Up to 10 files per stage.</span>
+                    </div>
+                  )}
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="mt-6 border-t border-slate-100 pt-5">
         <h3 className="section-title">Application information</h3>
@@ -482,6 +583,22 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
             {!isAdmin && approvalStages.includes(currentStage) && (
               <p className="mt-2 text-xs font-semibold text-amber-700">Waiting for administrator approval: {application.steps[currentStage].approvalStatus || 'Pending'}</p>
             )}
+            {!complete && <p className="mt-2 text-xs font-medium text-slate-600">Assigned to: {application.assignedEmployeeName || users.find((item) => item.id === application.assignedEmployeeId)?.name || "Employee"}</p>}
+            {!complete && (
+              <form onSubmit={transferApplication} className="mt-3 flex flex-wrap items-end gap-2">
+                <label className="text-xs font-semibold text-slate-600">Transfer current stage to
+                  <select className="input mt-1 min-w-48" value={transferTo} onChange={(event) => setTransferSelection({ applicationId: application.id, employeeId: event.target.value })} required>
+                    <option value="" disabled>Select employee</option>
+                    {employees.filter((item) => item.active !== false).map((employee) => (
+                      <option key={employee.id} value={employee.id}>{employee.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" className="btn-outline !py-2" disabled={!transferTo || transferTo === application.assignedEmployeeId || busyAction === "transfer"}>
+                  {busyAction === "transfer" ? "Transferring…" : "Transfer application"}
+                </button>
+              </form>
+            )}
             {isAdmin && !approvalStages.includes(currentStage) && (
               <p className="mt-2 text-xs text-slate-500">Employee-owned stage. Review progress here; only the assigned employee can complete this step.</p>
             )}
@@ -493,7 +610,7 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
                 <button className="btn-outline" onClick={() => onApproval(application.id, 'Approved', approvalNote)}>Approve stage</button>
               </>
             )}
-            {!isAdmin && <button className="btn-primary" disabled={approvalStages.includes(currentStage) && application.steps[currentStage].approvalStatus !== 'Approved'} onClick={() => onCompleteStep(application.id)}>
+            {!isAdmin && <button className="btn-primary" disabled={!application.steps[currentStage].documents?.length || (approvalStages.includes(currentStage) && application.steps[currentStage].approvalStatus !== 'Approved')} onClick={() => onCompleteStep(application.id)}>
               Complete step <ArrowRight size={16} />
             </button>}
           </div>
@@ -514,6 +631,21 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
           </ul>
         </div>
       )}
+      {application.transferHistory?.length > 0 && (
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <h3 className="section-title">Application transfer history</h3>
+          <ul className="space-y-2 text-sm text-slate-600">
+            {application.transferHistory.map((event, index) => (
+              <li key={`${event.transferredAt}-${index}`} className="flex flex-wrap gap-x-2">
+                <span className="font-semibold">{event.stageName}</span>
+                <span>{event.fromEmployeeName || "Unassigned"} → {event.toEmployeeName}</span>
+                <span>by {event.transferredByName}</span>
+                <span className="text-slate-400">{fmtDateTime(event.transferredAt)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {complete && (
         <p className="mt-6 flex items-center gap-2 border-t border-slate-100 pt-5 text-sm font-semibold text-emerald-700">
           <Check size={16} /> All workflow steps are complete.
@@ -526,7 +658,10 @@ function ApplicationDetails({ application, onCompleteStep, onApproval, approvalN
 export default function Installations() {
   const { user, token } = useAuth();
   const isAdmin = user.role === "admin";
-  const { installations, applications, addApplication, uploadApplicationOcr, completeApplicationStep, decideApplicationApproval, users } = useCrm();
+  const {
+    installations, applications, addApplication, uploadApplicationOcr, uploadApplicationStepDocument,
+    transferApplication, completeApplicationStep, decideApplicationApproval, users, agents,
+  } = useCrm();
   const [applicationForm, setApplicationForm] = useState(emptyApplication);
   const [ocrFile, setOcrFile] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -794,7 +929,19 @@ export default function Installations() {
         </div>
 
         {selectedApplication && (
-          <ApplicationDetails application={selectedApplication} onCompleteStep={completeStep} onApproval={decideApproval} approvalNote={approvalNote} setApprovalNote={setApprovalNote} users={users} isAdmin={isAdmin} />
+          <ApplicationDetails
+            application={selectedApplication}
+            onCompleteStep={completeStep}
+            onApproval={decideApproval}
+            onUploadStepDocument={uploadApplicationStepDocument}
+            onTransfer={transferApplication}
+            approvalNote={approvalNote}
+            setApprovalNote={setApprovalNote}
+            users={users}
+            employees={isAdmin ? users.filter((item) => item.role === "employee") : agents}
+            token={token}
+            isAdmin={isAdmin}
+          />
         )}
       </section>
 

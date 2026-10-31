@@ -15,12 +15,19 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!token) return
-    apiRequest('/api/auth/me', { token }).catch(() => {
+    let active = true
+    apiRequest('/api/auth/me', { token }).then(({ user: currentUser }) => {
+      if (!active || !currentUser) return
+      localStorage.setItem('crm_user', JSON.stringify(currentUser))
+      setUser(currentUser)
+    }).catch(() => {
+      if (!active) return
       localStorage.removeItem('crm_user')
       localStorage.removeItem('crm_token')
       setUser(null)
       setToken('')
     })
+    return () => { active = false }
   }, [token])
 
   const login = async (username, password) => {

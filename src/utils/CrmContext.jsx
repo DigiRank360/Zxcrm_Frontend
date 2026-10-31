@@ -182,6 +182,27 @@ export function CrmProvider({ children }) {
     return updated
   }
 
+  const uploadApplicationStepDocument = async (id, stage, file) => {
+    const document = await documentToDataUrl(file)
+    const updated = await apiRequest(`/api/applications/${id}/steps/${stage}/documents`, {
+      method: 'POST', token, body: JSON.stringify({ document, fileName: file.name }),
+    })
+    replaceApplication(updated)
+    return updated
+  }
+
+  const transferApplication = async (id, employeeId) => {
+    const updated = await apiRequest(`/api/applications/${id}/transfer`, {
+      method: 'PATCH', token, body: JSON.stringify({ employeeId }),
+    })
+    const nextApplications = user.role === 'employee' && updated.assignedEmployeeId !== user.id
+      ? stateRef.current.applications.filter((item) => item.id !== id)
+      : stateRef.current.applications.map((item) => item.id === id ? updated : item)
+    stateRef.current = { ...stateRef.current, applications: nextApplications }
+    setApplicationsState(nextApplications)
+    return updated
+  }
+
   const assignInstallation = async (id, employeeId) => {
     const result = await apiRequest(`/api/installations/${id}/assign`, {
       method: 'PATCH', token, body: JSON.stringify({ employeeId: employeeId || null }),
@@ -318,6 +339,24 @@ export function CrmProvider({ children }) {
     return updated
   }
 
+  const softDeleteLead = async (id) => {
+    const result = await apiRequest(`/api/leads/${id}`, { method: 'DELETE', token })
+    const nextLeads = user?.role === 'admin'
+      ? stateRef.current.leads.map((lead) => lead.id === id ? result.lead : lead)
+      : stateRef.current.leads.filter((lead) => lead.id !== id)
+    stateRef.current = { ...stateRef.current, leads: nextLeads }
+    setLeadsState(nextLeads)
+    return result.lead
+  }
+
+  const restoreLead = async (id) => {
+    const result = await apiRequest(`/api/leads/${id}/restore`, { method: 'POST', token })
+    const nextLeads = stateRef.current.leads.map((lead) => lead.id === id ? result.lead : lead)
+    stateRef.current = { ...stateRef.current, leads: nextLeads }
+    setLeadsState(nextLeads)
+    return result.lead
+  }
+
   const importLeads = async (items) => {
     const result = await apiRequest('/api/leads/import', {
       method: 'POST', token, body: JSON.stringify(items),
@@ -341,10 +380,11 @@ export function CrmProvider({ children }) {
   const value = {
     agents, workers, leads, setLeads, attendance, setAttendance, installations,
     maintenance, setMaintenance, setMaintenanceLocal, addTicket, assignTicket,
-    applications, addApplication, completeApplicationStep, decideApplicationApproval, updateApplicationCommercial, uploadApplicationOcr, assignInstallation, customers,
+    applications, addApplication, completeApplicationStep, decideApplicationApproval, updateApplicationCommercial,
+    uploadApplicationOcr, uploadApplicationStepDocument, transferApplication, assignInstallation, customers,
     users, addUser, updateAgentRouting, updateUserProfile, softDeleteUser, restoreUser,
     visits, addVisit, uploadPhoto, holidays, addHoliday, removeHoliday,
-    autoAssignLeads, assignLead, transferLeadLocation, updateLead, importLeads, createManualLead, refreshLeads, loading, error,
+    autoAssignLeads, assignLead, transferLeadLocation, updateLead, softDeleteLead, restoreLead, importLeads, createManualLead, refreshLeads, loading, error,
   }
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>
 }

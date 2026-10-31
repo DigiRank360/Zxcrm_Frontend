@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Phone, CalendarClock, AlertCircle, PhoneCall, Clock, UserRound, CheckCircle2, X, MapPin, ArrowRightLeft, Plus } from 'lucide-react'
+import { Phone, CalendarClock, AlertCircle, PhoneCall, Clock, UserRound, CheckCircle2, X, MapPin, ArrowRightLeft, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
@@ -23,6 +23,7 @@ const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 
 // Order: overdue follow-ups, due today, never-called leads, later follow-ups, everything else
 function classify(lead, now) {
+  if (lead.status === 'Not Interested') return { key: 'not_interested', label: 'Not Interested', rank: 5 }
   const due = lead.followUp ? new Date(lead.followUp) : null
   const validDue = due && !Number.isNaN(due.getTime()) ? due : null
   if (validDue) {
@@ -43,14 +44,15 @@ const tabs = [
   { key: 'today', label: 'Due today' },
   { key: 'new', label: 'Not called' },
   { key: 'scheduled', label: 'Scheduled' },
+  { key: 'not_interested', label: 'Not Interested' },
   { key: 'all', label: 'All' },
 ]
 
-const accent = { overdue: 'border-l-rose-500', today: 'border-l-amber-500', new: 'border-l-brand-500', scheduled: 'border-l-slate-300', open: 'border-l-slate-200', interested: 'border-l-emerald-400' }
-const tone = { overdue: 'bg-rose-50 text-rose-700', today: 'bg-amber-50 text-amber-700', new: 'bg-brand-50 text-brand-700', scheduled: 'bg-slate-100 text-slate-600', open: 'bg-slate-100 text-slate-600', interested: 'bg-emerald-50 text-emerald-700' }
+const accent = { overdue: 'border-l-rose-500', today: 'border-l-amber-500', new: 'border-l-brand-500', scheduled: 'border-l-slate-300', open: 'border-l-slate-200', interested: 'border-l-emerald-400', not_interested: 'border-l-rose-400' }
+const tone = { overdue: 'bg-rose-50 text-rose-700', today: 'bg-amber-50 text-amber-700', new: 'bg-brand-50 text-brand-700', scheduled: 'bg-slate-100 text-slate-600', open: 'bg-slate-100 text-slate-600', interested: 'bg-emerald-50 text-emerald-700', not_interested: 'bg-rose-50 text-rose-700' }
 
 export default function AgentCalling() {
-  const { leads, updateLead, createManualLead, attendance, agents, assignLead } = useCrm()
+  const { leads, updateLead, softDeleteLead, createManualLead, attendance, agents, assignLead } = useCrm()
   const { user } = useAuth()
   const working = attendance.some((a) =>
     a.date === istDate() &&
@@ -61,6 +63,7 @@ export default function AgentCalling() {
   const [draft, setDraft] = useState({})
   const [tab, setTab] = useState('pending')
   const [savingId, setSavingId] = useState('')
+  const [deletingId, setDeletingId] = useState('')
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
   const [editing, setEditing] = useState(null)
@@ -73,7 +76,7 @@ export default function AgentCalling() {
   const queue = useMemo(() => {
     const now = new Date()
     return leads
-      .filter((l) => l.agentId === user.id && !['Converted', 'Not Interested'].includes(l.status))
+      .filter((l) => l.agentId === user.id && l.status !== 'Converted' && !l.deletedAt)
       .map((l) => ({ lead: l, group: classify(l, now) }))
       .sort((a, b) => a.group.rank - b.group.rank || String(a.lead.followUp || '~').localeCompare(String(b.lead.followUp || '~')))
   }, [leads, user.id])
@@ -104,21 +107,41 @@ export default function AgentCalling() {
 
   const save = async (lead) => {
     const d = draft[lead.id] || {}
+    if (d.outcome === 'Others' && !d.notes?.trim()) {
+      setError('Enter a message for the Others outcome before saving.')
+      return
+    }
     setSavingId(lead.id)
     setError('')
     setSaved('')
     try {
       await updateLead(lead.id, {
-        status: d.outcome || lead.status,
+        status: d.outcome === 'Others' ? 'Other' : d.outcome || lead.status,
         followUp: d.followUp ?? toDateTimeLocal(lead.followUp),
         notes: d.notes ?? lead.notes ?? '',
       })
       setDraft((p) => ({ ...p, [lead.id]: {} }))
       setSaved(`Call log saved for ${lead.name}.`)
+      if (d.outcome === 'Not Interested') setTab('not_interested')
     } catch (requestError) {
       setError(requestError.message)
     } finally {
       setSavingId('')
+    }
+  }
+
+  const removeLead = async (lead) => {
+    if (!window.confirm(`Move ${lead.name} to the archive? It can be restored by an administrator.`)) return
+    setDeletingId(lead.id)
+    setError('')
+    setSaved('')
+    try {
+      await softDeleteLead(lead.id)
+      setSaved(`${lead.name} moved to the archive.`)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setDeletingId('')
     }
   }
 
@@ -152,6 +175,7 @@ export default function AgentCalling() {
       await updateLead(id, fields)
       setSaved(`${fields.name} updated.`)
       setEditing(null)
+      if (fields.status === 'Not Interested') setTab('not_interested')
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -326,15 +350,16 @@ export default function AgentCalling() {
             <div className="mt-auto border-t border-slate-100 bg-slate-50/60 p-4 sm:p-5">
               <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Log call</p>
               <div className="grid gap-2 sm:grid-cols-2">
-                <select aria-label="Call outcome" className="input" value={draft[l.id]?.outcome || ''} onChange={(e) => upd(l.id, 'outcome', e.target.value)}>
+                <select aria-label="Call outcome" className="input" value={draft[l.id]?.outcome || ''} onChange={(e) => setDraft((current) => ({ ...current, [l.id]: { ...current[l.id], outcome: e.target.value, ...(e.target.value === 'Others' ? { notes: '' } : {}) } }))}>
                   <option value="">Call outcome…</option>{CALL_OUTCOMES.map((o) => <option key={o}>{o}</option>)}
                 </select>
                 <input aria-label="Next follow-up" className="input" type="datetime-local" value={draft[l.id]?.followUp ?? toDateTimeLocal(l.followUp)} onChange={(e) => upd(l.id, 'followUp', e.target.value)} />
               </div>
-              <textarea aria-label="Call notes" className="input mt-2 min-h-16 resize-y" rows={2} maxLength={500} placeholder="Call notes" value={draft[l.id]?.notes ?? l.notes ?? ''} onChange={(e) => upd(l.id, 'notes', e.target.value)} />
+              <textarea aria-label={draft[l.id]?.outcome === 'Others' ? 'Other outcome message' : 'Call notes'} className="input mt-2 min-h-16 resize-y" rows={2} maxLength={500} placeholder={draft[l.id]?.outcome === 'Others' ? 'Enter a message for this outcome…' : 'Call notes'} required={draft[l.id]?.outcome === 'Others'} value={draft[l.id]?.notes ?? l.notes ?? ''} onChange={(e) => upd(l.id, 'notes', e.target.value)} />
               <div className="mt-3 flex items-center gap-2">
                 <button type="button" className="btn-primary flex-1" disabled={savingId === l.id} onClick={() => save(l)}>{savingId === l.id ? 'Saving…' : 'Save call log'}</button>
                 <button type="button" className="btn-outline" onClick={() => startEdit(l)}>Edit</button>
+                <button type="button" className="btn-outline !px-3 text-rose-700" aria-label={`Move ${l.name} to archive`} title="Move to archive" disabled={deletingId === l.id} onClick={() => removeLead(l)}><Trash2 size={16} /></button>
                 {l.customerId && (
                   <Link to={`/customers?customer=${l.customerId}`} title="Customer record" aria-label="Customer record" className="btn-outline !px-3"><UserRound size={16} /></Link>
                 )}
