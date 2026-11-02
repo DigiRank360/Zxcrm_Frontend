@@ -1,6 +1,6 @@
 import { DOCUMENT_TYPES } from '../utils/documentTypes'
 import { useEffect, useState } from 'react'
-import { Banknote, BriefcaseBusiness, CalendarDays, Check, ChevronRight, Download, Save, Search, Upload, UserRound, UsersRound } from 'lucide-react'
+import { Banknote, BriefcaseBusiness, CalendarDays, Check, ChevronRight, Download, Pencil, Save, Search, ShieldCheck, Trash2, Upload, UserRound, UsersRound } from 'lucide-react'
 import Badge from '../components/Badge'
 import PageHeader from '../components/PageHeader'
 import StatCard from '../components/StatCard'
@@ -32,11 +32,13 @@ function EmployeeProfile({ employee, token, onSaved }) {
   const [documentCategory, setDocumentCategory] = useState(DOCUMENT_TYPES[0])
   const [documentFile, setDocumentFile] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState(!employee.profileEditLocked)
   const [error, setError] = useState('')
   const [reviewingContact, setReviewingContact] = useState(false)
 
   const save = async (event) => {
     event.preventDefault()
+    if (!editing) return
     setSaving(true)
     setError('')
     try {
@@ -46,6 +48,7 @@ function EmployeeProfile({ employee, token, onSaved }) {
         body: JSON.stringify({ ...form, monthlySalary: Number(form.monthlySalary) }),
       })
       onSaved(employee.id, profile)
+      setEditing(false)
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -69,6 +72,7 @@ function EmployeeProfile({ employee, token, onSaved }) {
         method: 'PATCH', token, body: JSON.stringify(personal),
       })
       onSaved(employee.id, result)
+      setEditing(false)
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -86,6 +90,7 @@ function EmployeeProfile({ employee, token, onSaved }) {
         body: JSON.stringify(account),
       })
       onSaved(employee.id, result)
+      setEditing(false)
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -103,6 +108,7 @@ function EmployeeProfile({ employee, token, onSaved }) {
         body: JSON.stringify({ decision }),
       })
       onSaved(employee.id, result)
+      setEditing(false)
       setAccount({
         name: result.employee.name || '',
         phone: result.employee.phone || '',
@@ -124,7 +130,25 @@ function EmployeeProfile({ employee, token, onSaved }) {
         token,
         body: JSON.stringify(bank),
       })
-      onSaved(employee.id, { bankDetails: result.bankDetails })
+      onSaved(employee.id, result)
+      setEditing(false)
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const editProfile = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const profile = await apiRequest(`/api/hr/employees/${employee.id}/profile-edit`, {
+        method: 'POST',
+        token,
+      })
+      onSaved(employee.id, profile)
+      setEditing(true)
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -149,6 +173,35 @@ function EmployeeProfile({ employee, token, onSaved }) {
       setError(requestError.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const verifyDocument = async (document) => {
+    setError('')
+    try {
+      const verified = await apiRequest(`/api/hr/employees/${employee.id}/documents/${document.id}/verify`, {
+        method: 'POST',
+        token,
+      })
+      onSaved(employee.id, {
+        documents: employee.documents.map((item) => item.id === document.id ? verified : item),
+      })
+    } catch (requestError) {
+      setError(requestError.message)
+    }
+  }
+
+  const softDeleteDocument = async (document) => {
+    if (!window.confirm(`Move ${document.category} to the deleted documents archive?`)) return
+    setError('')
+    try {
+      await apiRequest(`/api/hr/employees/${employee.id}/documents/${document.id}`, {
+        method: 'DELETE',
+        token,
+      })
+      onSaved(employee.id, { documents: employee.documents.filter((item) => item.id !== document.id) })
+    } catch (requestError) {
+      setError(requestError.message)
     }
   }
 
@@ -182,85 +235,86 @@ function EmployeeProfile({ employee, token, onSaved }) {
           <p className="text-xs text-slate-500">ID {employee.employee?.reference} · Mobile {employee.phone || '—'} · Email {employee.employee?.email || '—'}</p>
         </div>
         <Badge>{employee.active === false ? 'Inactive' : 'Active'}</Badge>
+        <Badge>{editing ? 'Edit enabled' : 'Profile locked'}</Badge>
       </div>
       <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <h3 className="mb-3 text-sm font-bold text-slate-800">Employee account details</h3>
         <p className="mb-3 text-xs text-slate-500">HR updates sync to the employee’s My Profile. Contact email does not change the login ID.</p>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <label className="text-xs font-semibold text-slate-600">Name
-            <input required maxLength={100} className="input mt-1" value={account.name} onChange={(event) => setAccount((current) => ({ ...current, name: event.target.value }))} />
+            <input required maxLength={100} disabled={!editing || saving} className="input mt-1" value={account.name} onChange={(event) => setAccount((current) => ({ ...current, name: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">Mobile number
-            <input maxLength={50} className="input mt-1" value={account.phone} onChange={(event) => setAccount((current) => ({ ...current, phone: event.target.value }))} />
+            <input maxLength={50} disabled={!editing || saving} className="input mt-1" value={account.phone} onChange={(event) => setAccount((current) => ({ ...current, phone: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">Contact email
-            <input type="email" maxLength={254} className="input mt-1" value={account.contactEmail} onChange={(event) => setAccount((current) => ({ ...current, contactEmail: event.target.value }))} />
+            <input type="email" maxLength={254} disabled={!editing || saving} className="input mt-1" value={account.contactEmail} onChange={(event) => setAccount((current) => ({ ...current, contactEmail: event.target.value }))} />
           </label>
         </div>
-        <button type="button" disabled={saving} onClick={saveAccount} className="btn-outline mt-3"><Save size={15} /> {saving ? 'Saving…' : 'Save account details'}</button>
+        <button type="button" disabled={!editing || saving} onClick={saveAccount} className="btn-outline mt-3"><Save size={15} /> {saving ? 'Saving…' : 'Save account details'}</button>
       </div>
       {employee.pendingContactChange && (
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <h3 className="text-sm font-bold text-amber-900">Pending employee contact update</h3>
           <p className="mt-1 text-xs text-amber-800">{employee.pendingContactChange.name} · {employee.pendingContactChange.phone || 'No phone'} · {employee.pendingContactChange.contactEmail || 'No email'}</p>
           <div className="mt-3 flex gap-2">
-            <button type="button" disabled={reviewingContact} onClick={() => reviewContact('Approved')} className="btn-primary !py-2"><Check size={15} /> Approve</button>
-            <button type="button" disabled={reviewingContact} onClick={() => reviewContact('Rejected')} className="btn-outline !py-2">{reviewingContact ? 'Saving…' : 'Reject'}</button>
+            <button type="button" disabled={!editing || reviewingContact} onClick={() => reviewContact('Approved')} className="btn-primary !py-2"><Check size={15} /> Approve</button>
+            <button type="button" disabled={!editing || reviewingContact} onClick={() => reviewContact('Rejected')} className="btn-outline !py-2">{reviewingContact ? 'Saving…' : 'Reject'}</button>
           </div>
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <label className="text-xs font-semibold text-slate-600">Department
-          <input maxLength={100} className="input mt-1" value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} />
+          <input maxLength={100} disabled={!editing || saving} className="input mt-1" value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} />
         </label>
         <label className="text-xs font-semibold text-slate-600">Job title
-          <input maxLength={100} className="input mt-1" value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} />
+          <input maxLength={100} disabled={!editing || saving} className="input mt-1" value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} />
         </label>
         <label className="text-xs font-semibold text-slate-600">Joining date
-          <input type="date" className="input mt-1" value={form.joiningDate} onChange={(event) => setForm((current) => ({ ...current, joiningDate: event.target.value }))} />
+          <input type="date" disabled={!editing || saving} className="input mt-1" value={form.joiningDate} onChange={(event) => setForm((current) => ({ ...current, joiningDate: event.target.value }))} />
         </label>
         <label className="text-xs font-semibold text-slate-600">Monthly salary (INR)
-          <input required type="number" min="0" max="1000000000" step="0.01" className="input mt-1" value={form.monthlySalary} onChange={(event) => setForm((current) => ({ ...current, monthlySalary: event.target.value }))} />
+          <input required type="number" min="0" max="1000000000" step="0.01" disabled={!editing || saving} className="input mt-1" value={form.monthlySalary} onChange={(event) => setForm((current) => ({ ...current, monthlySalary: event.target.value }))} />
         </label>
       </div>
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <h3 className="mb-3 text-sm font-bold text-slate-800">Bank account details</h3>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <label className="text-xs font-semibold text-slate-600">Account holder
-            <input maxLength={120} className="input mt-1" value={bank.accountHolder} onChange={(event) => setBank((current) => ({ ...current, accountHolder: event.target.value }))} />
+            <input maxLength={120} disabled={!editing || saving} className="input mt-1" value={bank.accountHolder} onChange={(event) => setBank((current) => ({ ...current, accountHolder: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">Bank name
-            <input maxLength={120} className="input mt-1" value={bank.bankName} onChange={(event) => setBank((current) => ({ ...current, bankName: event.target.value }))} />
+            <input maxLength={120} disabled={!editing || saving} className="input mt-1" value={bank.bankName} onChange={(event) => setBank((current) => ({ ...current, bankName: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">Account number
-            <input inputMode="numeric" autoComplete="off" className="input mt-1" value={bank.accountNumber} onChange={(event) => setBank((current) => ({ ...current, accountNumber: event.target.value }))} />
+            <input inputMode="numeric" autoComplete="off" disabled={!editing || saving} className="input mt-1" value={bank.accountNumber} onChange={(event) => setBank((current) => ({ ...current, accountNumber: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">IFSC
-            <input maxLength={11} autoCapitalize="characters" className="input mt-1 uppercase" value={bank.ifsc} onChange={(event) => setBank((current) => ({ ...current, ifsc: event.target.value.toUpperCase() }))} />
+            <input maxLength={11} autoCapitalize="characters" disabled={!editing || saving} className="input mt-1 uppercase" value={bank.ifsc} onChange={(event) => setBank((current) => ({ ...current, ifsc: event.target.value.toUpperCase() }))} />
           </label>
         </div>
-        <button type="button" disabled={saving} onClick={saveBank} className="btn-outline mt-3"><Save size={15} /> Save bank details</button>
+        <button type="button" disabled={!editing || saving} onClick={saveBank} className="btn-outline mt-3"><Save size={15} /> Save bank details</button>
       </div>
       <div className="mt-4 rounded-xl border border-slate-200 p-4">
         <h3 className="mb-3 text-sm font-bold text-slate-800">Personal details</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-xs font-semibold text-slate-600">Present address
-            <input maxLength={300} className="input mt-1" value={personal.presentAddress} onChange={(event) => setPersonal((current) => ({ ...current, presentAddress: event.target.value }))} />
+            <input maxLength={300} disabled={!editing || saving} className="input mt-1" value={personal.presentAddress} onChange={(event) => setPersonal((current) => ({ ...current, presentAddress: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">Temporary address
-            <input maxLength={300} className="input mt-1" value={personal.temporaryAddress} onChange={(event) => setPersonal((current) => ({ ...current, temporaryAddress: event.target.value }))} />
+            <input maxLength={300} disabled={!editing || saving} className="input mt-1" value={personal.temporaryAddress} onChange={(event) => setPersonal((current) => ({ ...current, temporaryAddress: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">Father name
-            <input maxLength={300} className="input mt-1" value={personal.fatherName} onChange={(event) => setPersonal((current) => ({ ...current, fatherName: event.target.value }))} />
+            <input maxLength={300} disabled={!editing || saving} className="input mt-1" value={personal.fatherName} onChange={(event) => setPersonal((current) => ({ ...current, fatherName: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">Mother name
-            <input maxLength={300} className="input mt-1" value={personal.motherName} onChange={(event) => setPersonal((current) => ({ ...current, motherName: event.target.value }))} />
+            <input maxLength={300} disabled={!editing || saving} className="input mt-1" value={personal.motherName} onChange={(event) => setPersonal((current) => ({ ...current, motherName: event.target.value }))} />
           </label>
           <label className="text-xs font-semibold text-slate-600">Date of birth
-            <input type="date" maxLength={300} className="input mt-1" value={personal.dateOfBirth} onChange={(event) => setPersonal((current) => ({ ...current, dateOfBirth: event.target.value }))} />
+            <input type="date" maxLength={300} disabled={!editing || saving} className="input mt-1" value={personal.dateOfBirth} onChange={(event) => setPersonal((current) => ({ ...current, dateOfBirth: event.target.value }))} />
           </label>
         </div>
-        <button type="button" disabled={saving} onClick={savePersonal} className="btn-primary mt-3">Save personal details</button>
+        <button type="button" disabled={!editing || saving} onClick={savePersonal} className="btn-primary mt-3">Save personal details</button>
       </div>
 
       <div className="mt-4 rounded-xl border border-slate-200 p-4">
@@ -277,19 +331,31 @@ function EmployeeProfile({ employee, token, onSaved }) {
           <button type="button" disabled={saving || !documentFile} onClick={uploadDocument} className="btn-outline"><Upload size={15} /> {saving ? 'Uploading…' : 'Upload document'}</button>
         </div>
         <ul className="mt-3 space-y-2">
-          {(employee.documents || []).map((document) => <li key={document.id} className="flex items-center justify-between gap-3 text-sm">
-            <span>
+          {(employee.documents || []).map((document) => <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <span className="min-w-0">
               <b>{document.category}</b> · {document.fileName}
               {document.uploadedByName && <span className="block text-xs text-slate-500">Added by {document.uploadedByName}{document.uploadedByRole === 'hr' ? ' (HR)' : ' (employee)'}</span>}
-              {document.reviewStatus === 'Pending review' && <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Employee submission · Pending review</span>}
+              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${document.reviewStatus === 'Verified' ? 'bg-emerald-50 text-emerald-700' : document.reviewStatus === 'Pending review' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>
+                {document.reviewStatus === 'Verified' ? `Verified${document.verifiedBy?.name ? ` by ${document.verifiedBy.name}` : ''}` : document.reviewStatus === 'Pending review' ? 'Employee submission · Pending review' : 'On file'}
+              </span>
             </span>
-            <button type="button" onClick={() => downloadDocument(document)} className="inline-flex items-center gap-1 font-semibold text-brand-700"><Download size={14} /> Download</button>
+            <div className="flex shrink-0 items-center gap-2">
+              {document.reviewStatus === 'Pending review' && (
+                <button type="button" onClick={() => verifyDocument(document)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
+                  <ShieldCheck size={14} /> Verify
+                </button>
+              )}
+              <button type="button" onClick={() => downloadDocument(document)} className="inline-flex items-center gap-1 font-semibold text-brand-700"><Download size={14} /> Download</button>
+              <button type="button" onClick={() => softDeleteDocument(document)} aria-label={`Soft delete ${document.category}`} title="Soft delete document" className="rounded-lg p-1.5 text-rose-700 hover:bg-rose-50"><Trash2 size={15} /></button>
+            </div>
           </li>)}
           {!employee.documents?.length && <li className="text-xs text-slate-500">No documents uploaded.</li>}
         </ul>
       </div>
       {error && <p role="alert" className="mt-2 text-sm text-rose-700">{error}</p>}
-      <button disabled={saving} className="btn-outline mt-3"><Save size={15} /> {saving ? 'Saving…' : 'Save HR profile'}</button>
+      {editing
+        ? <button type="submit" disabled={saving} className="btn-primary mt-3"><Save size={15} /> {saving ? 'Saving…' : 'Save HR profile'}</button>
+        : <button type="button" disabled={saving} onClick={editProfile} className="btn-outline mt-3"><Pencil size={15} /> {saving ? 'Opening…' : 'Edit HR details'}</button>}
     </form>
   )
 }

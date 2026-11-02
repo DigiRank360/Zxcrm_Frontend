@@ -210,6 +210,11 @@ export default function MyProfile() {
                   {document.reviewStatus === 'Pending review' && (
                     <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Submitted · Pending HR review</span>
                   )}
+                  {document.reviewStatus === 'Verified' && (
+                    <span className="mt-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      Verified{document.verifiedBy?.name ? ` by ${document.verifiedBy.name}` : ''}
+                    </span>
+                  )}
                 </span>
               </div>
               <button type="button" onClick={() => downloadDocument(document)} className="btn-outline !px-3 !py-1.5 text-xs"><Download size={14} /> Download</button>
