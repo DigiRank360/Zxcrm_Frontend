@@ -278,7 +278,11 @@ function EmployeeProfile({ employee, token, onSaved }) {
         </div>
         <ul className="mt-3 space-y-2">
           {(employee.documents || []).map((document) => <li key={document.id} className="flex items-center justify-between gap-3 text-sm">
-            <span>{document.category} · {document.fileName}</span>
+            <span>
+              <b>{document.category}</b> · {document.fileName}
+              {document.uploadedByName && <span className="block text-xs text-slate-500">Added by {document.uploadedByName}{document.uploadedByRole === 'hr' ? ' (HR)' : ' (employee)'}</span>}
+              {document.reviewStatus === 'Pending review' && <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Employee submission · Pending review</span>}
+            </span>
             <button type="button" onClick={() => downloadDocument(document)} className="inline-flex items-center gap-1 font-semibold text-brand-700"><Download size={14} /> Download</button>
           </li>)}
           {!employee.documents?.length && <li className="text-xs text-slate-500">No documents uploaded.</li>}

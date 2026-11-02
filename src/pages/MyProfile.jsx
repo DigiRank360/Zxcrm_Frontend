@@ -1,23 +1,33 @@
 import { DOCUMENT_TYPES } from '../utils/documentTypes'
 import { useEffect, useState } from 'react'
-import { Download, Save, Upload } from 'lucide-react'
+import { Download, FileText, ShieldCheck, Upload } from 'lucide-react'
+import Avatar from '../components/Avatar'
 import PageHeader from '../components/PageHeader'
 import { apiRequest } from '../utils/api'
 import { useAuth } from '../utils/AuthContext'
 import { documentToDataUrl } from '../utils/uploads'
 
+function ProfileField({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium text-slate-500">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-semibold text-slate-800">{value || 'Not added'}</dd>
+    </div>
+  )
+}
+
+function formatDate(value) {
+  if (!value) return 'Not added'
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString()
+}
+
 export default function MyProfile() {
   const { token, user } = useAuth()
   const [profile, setProfile] = useState(null)
-  const [bank, setBank] = useState({ accountHolder: '', bankName: '', accountNumber: '', ifsc: '' })
   const [documentCategory, setDocumentCategory] = useState(DOCUMENT_TYPES[0])
   const [documentFile, setDocumentFile] = useState(null)
-  const [personal, setPersonal] = useState({ presentAddress: '', temporaryAddress: '', fatherName: '', motherName: '', dateOfBirth: '' })
-  const [contact, setContact] = useState({ name: '', phone: '', contactEmail: '' })
-  const [savingPersonal, setSavingPersonal] = useState(false)
-  const [savingContact, setSavingContact] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [savingBank, setSavingBank] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
@@ -26,19 +36,6 @@ export default function MyProfile() {
     apiRequest('/api/hr/me', { token }).then((result) => {
       if (!active) return
       setProfile(result)
-      setContact({
-        name: result.employee?.name || '',
-        phone: result.employee?.phone || '',
-        contactEmail: result.employee?.contactEmail || '',
-      })
-      setPersonal({
-        presentAddress: result.presentAddress || '',
-        temporaryAddress: result.temporaryAddress || '',
-        fatherName: result.fatherName || '',
-        motherName: result.motherName || '',
-        dateOfBirth: result.dateOfBirth || '',
-      })
-      setBank(result.bankDetails || { accountHolder: '', bankName: '', accountNumber: '', ifsc: '' })
     }).catch((requestError) => {
       if (active) setError(requestError.message)
     }).finally(() => {
@@ -46,59 +43,6 @@ export default function MyProfile() {
     })
     return () => { active = false }
   }, [token])
-
-  const requestContactUpdate = async (event) => {
-    event.preventDefault()
-    setSavingContact(true)
-    setError('')
-    try {
-      const result = await apiRequest('/api/hr/me/contact-details', {
-        method: 'PATCH',
-        token,
-        body: JSON.stringify(contact),
-      })
-      setProfile((current) => ({ ...current, pendingContactChange: result.pendingContactChange }))
-    } catch (requestError) {
-      setError(requestError.message)
-    } finally {
-      setSavingContact(false)
-    }
-  }
-
-  const savePersonal = async (event) => {
-    event.preventDefault()
-    setSavingPersonal(true)
-    setError('')
-    try {
-      const result = await apiRequest('/api/hr/me/personal-details', {
-        method: 'PATCH', token, body: JSON.stringify(personal),
-      })
-      setPersonal(result)
-    } catch (requestError) {
-      setError(requestError.message)
-    } finally {
-      setSavingPersonal(false)
-    }
-  }
-
-  const saveBank = async (event) => {
-    event.preventDefault()
-    setSavingBank(true)
-    setError('')
-    try {
-      const result = await apiRequest('/api/hr/me/bank-details', {
-        method: 'PATCH',
-        token,
-        body: JSON.stringify(bank),
-      })
-      setBank(result.bankDetails)
-      setProfile((current) => ({ ...current, bankDetails: result.bankDetails }))
-    } catch (requestError) {
-      setError(requestError.message)
-    } finally {
-      setSavingBank(false)
-    }
-  }
 
   const uploadDocument = async (event) => {
     event.preventDefault()
@@ -112,7 +56,12 @@ export default function MyProfile() {
         token,
         body: JSON.stringify({ category: documentCategory, document }),
       })
-      setProfile((current) => ({ ...current, documents: [result, ...(current.documents || [])] }))
+      setProfile((current) => ({
+        ...current,
+        updatedAt: result.uploadedAt,
+        updatedBy: { id: result.uploadedBy, name: result.uploadedByName, role: result.uploadedByRole },
+        documents: [result, ...(current.documents || [])],
+      }))
       setDocumentFile(null)
       event.target.reset()
     } catch (requestError) {
@@ -145,91 +94,87 @@ export default function MyProfile() {
 
   return (
     <>
-      <PageHeader eyebrow="My account" title="My profile & documents" subtitle={`${user.name} · update bank details and upload private employee documents.`} />
+      <PageHeader eyebrow="My account" title="My profile & documents" subtitle={`${user.name} · view your HR profile and submit documents for review.`} />
       {error && <p role="alert" className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
       {loading ? <div className="card text-sm text-slate-500">Loading your profile…</div> : <>
-        <section className="card mb-6">
-          <h2 className="section-title">Employee details</h2>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div><dt className="text-xs font-semibold text-slate-500">Employee ID</dt><dd className="font-semibold">{profile?.employee?.reference || '—'}</dd></div>
-            <div><dt className="text-xs font-semibold text-slate-500">Name</dt><dd className="font-semibold">{profile?.employee?.name}</dd></div>
-            <div><dt className="text-xs font-semibold text-slate-500">Mobile number</dt><dd className="font-semibold">{profile?.employee?.phone || '—'}</dd></div>
-            <div><dt className="text-xs font-semibold text-slate-500">Email ID</dt><dd className="font-semibold">{profile?.employee?.email || '—'}</dd></div>
+        <section className="card mb-6 overflow-hidden !p-0">
+          <div className="bg-gradient-to-r from-brand-700 via-brand-600 to-indigo-600 px-5 py-6 text-white sm:px-7">
+            <div className="flex flex-wrap items-center gap-4">
+              <Avatar name={profile?.employee?.name || user.name} size="h-16 w-16" className="rounded-2xl text-lg ring-2 ring-white/40" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-100">Employee profile</p>
+                <h2 className="mt-1 truncate text-2xl font-bold">{profile?.employee?.name || user.name}</h2>
+                <p className="mt-1 text-sm text-blue-100">
+                  {[profile?.jobTitle, profile?.department].filter(Boolean).join(' · ') || 'Your work and personal information'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm">
+                <span className="block text-xs text-blue-100">Employee ID</span>
+                <span className="font-semibold">{profile?.employee?.reference || '—'}</span>
+              </div>
+            </div>
+          </div>
+          <dl className="grid gap-5 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:px-7">
+            <ProfileField label="Department" value={profile?.department} />
+            <ProfileField label="Job title" value={profile?.jobTitle} />
+            <ProfileField label="Joining date" value={formatDate(profile?.joiningDate)} />
+            <ProfileField
+              label="Monthly salary"
+              value={profile?.monthlySalary == null
+                ? ''
+                : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(profile.monthlySalary)}
+            />
+            <ProfileField label="Mobile number" value={profile?.employee?.phone} />
+            <ProfileField label="Email ID" value={profile?.employee?.contactEmail || profile?.employee?.email} />
+            <ProfileField label="Present address" value={profile?.presentAddress} />
+            <ProfileField label="Date of birth" value={formatDate(profile?.dateOfBirth)} />
           </dl>
+          {profile?.updatedAt && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3 text-xs text-slate-500 sm:px-7">
+              <ShieldCheck size={15} className="text-emerald-600" />
+              <span>
+                Last updated {new Date(profile.updatedAt).toLocaleString()}
+                {profile.updatedBy?.name ? ` by ${profile.updatedBy.name}${profile.updatedBy.role === 'hr' ? ' (HR)' : ''}` : ''}
+              </span>
+            </div>
+          )}
         </section>
 
-        <form onSubmit={requestContactUpdate} className="card mb-6">
-          <h2 className="section-title">Request contact detail update</h2>
-          <p className="mb-4 text-sm text-slate-500">HR will review these changes. Leave contact email blank if you only want to update your name or phone. Your login ID will not change.</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-600">Name
-              <input required maxLength={100} className="input mt-1" value={contact.name} onChange={(event) => setContact((current) => ({ ...current, name: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">Mobile number
-              <input type="tel" maxLength={50} className="input mt-1" value={contact.phone} onChange={(event) => setContact((current) => ({ ...current, phone: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">Contact email
-              <input type="email" maxLength={254} className="input mt-1" value={contact.contactEmail} onChange={(event) => setContact((current) => ({ ...current, contactEmail: event.target.value }))} />
-            </label>
+        <section className="card mb-6">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="section-title !mb-1">Profile details</h2>
+              <p className="text-xs text-slate-500">These details are managed by HR. Contact HR if something needs correction.</p>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">View only</span>
           </div>
-          {profile?.pendingContactChange && (
-            <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-              Contact update pending HR review: {profile.pendingContactChange.name}
-            </p>
+          <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <ProfileField label="Full name" value={profile?.employee?.name} />
+            <ProfileField label="Mobile number" value={profile?.employee?.phone} />
+            <ProfileField label="Email address" value={profile?.employee?.contactEmail || profile?.employee?.email} />
+            <ProfileField label="Temporary address" value={profile?.temporaryAddress} />
+            <ProfileField label="Father name" value={profile?.fatherName} />
+            <ProfileField label="Mother name" value={profile?.motherName} />
+          </dl>
+          {profile?.bankDetails && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <h3 className="mb-3 text-sm font-semibold text-slate-800">Bank details · view only</h3>
+              <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <ProfileField label="Account holder" value={profile.bankDetails.accountHolder} />
+                <ProfileField label="Bank name" value={profile.bankDetails.bankName} />
+                <ProfileField label="Account number" value={profile.bankDetails.accountNumber ? `••••${profile.bankDetails.accountNumber.slice(-4)}` : ''} />
+                <ProfileField label="IFSC" value={profile.bankDetails.ifsc} />
+              </dl>
+            </div>
           )}
-          {profile?.lastContactChangeReview && (
-            <p className="mt-2 text-xs text-slate-500">
-              Last request was {profile.lastContactChangeReview.decision.toLowerCase()} by HR.
-            </p>
-          )}
-          <button disabled={savingContact} className="btn-primary mt-4"><Save size={16} /> {savingContact ? 'Submitting…' : 'Submit for HR approval'}</button>
-        </form>
-
-        <form onSubmit={savePersonal} className="card mb-6">
-          <h2 className="section-title">Personal details</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-600">Present address
-              <input maxLength={300} className="input mt-1" value={personal.presentAddress} onChange={(event) => setPersonal((current) => ({ ...current, presentAddress: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">Temporary address
-              <input maxLength={300} className="input mt-1" value={personal.temporaryAddress} onChange={(event) => setPersonal((current) => ({ ...current, temporaryAddress: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">Father name
-              <input maxLength={300} className="input mt-1" value={personal.fatherName} onChange={(event) => setPersonal((current) => ({ ...current, fatherName: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">Mother name
-              <input maxLength={300} className="input mt-1" value={personal.motherName} onChange={(event) => setPersonal((current) => ({ ...current, motherName: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">Date of birth
-              <input type="date" maxLength={300} className="input mt-1" value={personal.dateOfBirth} onChange={(event) => setPersonal((current) => ({ ...current, dateOfBirth: event.target.value }))} />
-            </label>
-          </div>
-          <button disabled={savingPersonal} className="btn-primary mt-4"><Save size={16} /> {savingPersonal ? 'Saving…' : 'Save personal details'}</button>
-        </form>
-
-        <form onSubmit={saveBank} className="card mb-6">
-          <h2 className="section-title">Bank account details</h2>
-          <p className="mb-4 text-xs text-slate-500">Only you and HR can access these details. The account number is encrypted in storage. Never enter a PIN, CVV, OTP, or password.</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-600">Account holder
-              <input required maxLength={120} className="input mt-1" value={bank.accountHolder} onChange={(event) => setBank((current) => ({ ...current, accountHolder: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">Bank name
-              <input required maxLength={120} className="input mt-1" value={bank.bankName} onChange={(event) => setBank((current) => ({ ...current, bankName: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">Account number
-              <input required inputMode="numeric" autoComplete="off" className="input mt-1" value={bank.accountNumber} onChange={(event) => setBank((current) => ({ ...current, accountNumber: event.target.value }))} />
-            </label>
-            <label className="text-xs font-semibold text-slate-600">IFSC
-              <input required maxLength={11} autoCapitalize="characters" className="input mt-1 uppercase" value={bank.ifsc} onChange={(event) => setBank((current) => ({ ...current, ifsc: event.target.value.toUpperCase() }))} />
-            </label>
-          </div>
-          <button disabled={savingBank} className="btn-primary mt-4"><Save size={16} /> {savingBank ? 'Saving…' : 'Save bank details'}</button>
-        </form>
+        </section>
 
         <form onSubmit={uploadDocument} className="card mb-6">
-          <h2 className="section-title">Upload employee document</h2>
-          <p className="mb-4 text-xs text-slate-500">Documents are private in Cloudinary and downloadable only by you or HR. Accepted: PDF, JPEG, or PNG up to 7 MB.</p>
+          <div className="mb-4 flex items-center gap-2">
+            <FileText size={17} className="text-brand-600" />
+            <h2 className="section-title !mb-0">Upload employee document</h2>
+          </div>
+          <p className="mb-4 text-xs text-slate-500">Submitting uploads this private document directly to HR for review. Accepted: PDF, JPEG, or PNG up to 7 MB.</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-xs font-semibold text-slate-600">Document type
               <select className="input mt-1" value={documentCategory} onChange={(event) => setDocumentCategory(event.target.value)}>
@@ -240,17 +185,36 @@ export default function MyProfile() {
               <input required type="file" accept="application/pdf,image/jpeg,image/png" className="input mt-1" onChange={(event) => setDocumentFile(event.target.files?.[0] || null)} />
             </label>
           </div>
-          <button disabled={uploading || !documentFile} className="btn-primary mt-4"><Upload size={16} /> {uploading ? 'Uploading…' : 'Upload document'}</button>
+          <button disabled={uploading || !documentFile} className="btn-primary mt-4"><Upload size={16} /> {uploading ? 'Submitting…' : 'Submit document to HR'}</button>
         </form>
 
         <section className="card">
-          <h2 className="section-title">My documents</h2>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="section-title !mb-1">My documents</h2>
+              <p className="text-xs text-slate-500">Documents added by you or HR are listed here.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{profile?.documents?.length || 0}</span>
+          </div>
           <ul className="divide-y divide-slate-100">
-            {(profile?.documents || []).map((document) => <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
-              <span><b>{document.category}</b> · {document.fileName} · {new Date(document.uploadedAt).toLocaleDateString()}</span>
-              <button type="button" onClick={() => downloadDocument(document)} className="inline-flex items-center gap-1 font-semibold text-brand-700"><Download size={15} /> Download</button>
+            {(profile?.documents || []).map((document) => <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="rounded-lg bg-brand-50 p-2 text-brand-700"><FileText size={17} /></span>
+                <span className="min-w-0">
+                  <b className="block text-sm text-slate-800">{document.category}</b>
+                  <span className="mt-0.5 block truncate text-xs text-slate-500">{document.fileName}</span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {formatDate(document.uploadedAt)}
+                    {document.uploadedByName ? ` · Added by ${document.uploadedByName}${document.uploadedByRole === 'hr' ? ' (HR)' : ''}` : ''}
+                  </span>
+                  {document.reviewStatus === 'Pending review' && (
+                    <span className="mt-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Submitted · Pending HR review</span>
+                  )}
+                </span>
+              </div>
+              <button type="button" onClick={() => downloadDocument(document)} className="btn-outline !px-3 !py-1.5 text-xs"><Download size={14} /> Download</button>
             </li>)}
-            {!profile?.documents?.length && <li className="py-4 text-sm text-slate-500">No documents uploaded yet.</li>}
+            {!profile?.documents?.length && <li className="py-6 text-center text-sm text-slate-500">No documents uploaded yet.</li>}
           </ul>
         </section>
       </>}
