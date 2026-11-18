@@ -42,6 +42,39 @@ export const parseCsv = (text) => {
   })
 }
 
+export const downloadCsv = (filename, columns, rows) => {
+  const escapeCell = (value) => {
+    if (value === null || value === undefined) return ""
+    const text = String(value)
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  }
+
+  const csv = [
+    columns.map((column) => escapeCell(column.label)).join(","),
+    ...rows.map((row) =>
+      columns
+        .map((column) =>
+          escapeCell(
+            typeof column.value === "function"
+              ? column.value(row)
+              : row[column.key],
+          ),
+        )
+        .join(","),
+    ),
+  ].join("\r\n")
+
+  const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  const link = window.document.createElement("a")
+  link.href = url
+  link.download = filename
+  window.document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
 const TZ = 'Asia/Kolkata'
 export const istTime = (d = new Date()) => d.toLocaleTimeString('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
 export const istDate = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: TZ })

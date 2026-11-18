@@ -7,6 +7,7 @@ import StatCard from '../components/StatCard'
 import { apiRequest } from '../utils/api'
 import { useAuth } from '../utils/AuthContext'
 import { documentToDataUrl } from '../utils/uploads'
+import { downloadCsv } from '../utils/helpers'
 
 const money = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value || 0)
 const thisMonth = new Date().toISOString().slice(0, 7)
@@ -490,6 +491,30 @@ export default function HrPanel() {
     return { employee, records, current: records.find((record) => record.month === thisMonth) }
   })
 
+  const downloadEmployees = () => {
+    downloadCsv(
+      `employees-${new Date().toISOString().slice(0, 10)}.csv`,
+      [
+        { key: 'name', label: 'Name' },
+        { key: 'username', label: 'Username' },
+        { key: 'role', label: 'Role' },
+        { key: 'active', label: 'Status', value: (employee) => employee.active === false ? 'Inactive' : 'Active' },
+        { key: 'department', label: 'Department' },
+        { key: 'jobTitle', label: 'Job Title' },
+        { key: 'joiningDate', label: 'Joining Date' },
+        { key: 'monthlySalary', label: 'Monthly Salary' },
+        { key: 'phone', label: 'Phone', value: (employee) => employee.phone || employee.employee?.phone || '' },
+        { key: 'email', label: 'Email', value: (employee) => employee.contactEmail || employee.employee?.email || '' },
+        { key: 'presentAddress', label: 'Present Address' },
+        { key: 'temporaryAddress', label: 'Temporary Address' },
+        { key: 'fatherName', label: 'Father Name' },
+        { key: 'motherName', label: 'Mother Name' },
+        { key: 'dateOfBirth', label: 'Date of Birth' },
+      ],
+      employees,
+    )
+  }
+
   return (
     <>
       <PageHeader eyebrow="Human resources" title="HR & payroll" subtitle="Manage every employee profile, salary, deductions, payslip and payment status from one clean workspace." />
@@ -528,9 +553,14 @@ export default function HrPanel() {
       </section>
 
       <section className="card mb-6 !p-0">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <h2 className="section-title">Employee management</h2>
-          <p className="text-xs text-slate-500">Select an active employee to manage their profile, salary, bank details and private documents. Bank data is encrypted at rest.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="section-title">Employee management</h2>
+            <p className="text-xs text-slate-500">Select an active employee to manage their profile, salary, bank details and private documents. Bank data is encrypted at rest.</p>
+          </div>
+          <button type="button" className="btn-outline" onClick={downloadEmployees} disabled={!employees.length}>
+            <Download size={16} /> Download Employee CSV
+          </button>
         </div>
         {loading ? <p className="p-5 text-sm text-slate-500">Loading employees…</p> : (
           <>

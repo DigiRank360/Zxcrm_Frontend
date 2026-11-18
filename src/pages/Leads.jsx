@@ -8,16 +8,21 @@ import {
   X,
   ArrowRightLeft,
   ArchiveRestore,
+  Download,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Person } from "../components/Avatar";
 import { useCrm } from "../utils/CrmContext";
 import { LEAD_SOURCES, LEAD_STATUSES } from "../data/crmOptions";
-import { fmtDate, parseCsv } from "../utils/helpers";
+import { downloadCsv, fmtDate, parseCsv } from "../utils/helpers";
 import SourceIcon from "../components/SourceIcon";
 import LeadLocationTransfer from "../components/LeadLocationTransfer";
 import PageHeader from "../components/PageHeader";
 import DataTable from "../components/DataTable";
 import Badge from "../components/Badge";
+import { useAuth } from "../utils/AuthContext";
+import { stateCities, states } from "../data/locations";
 
 const toDateTimeLocal = (value) => {
   if (!value) return "";
@@ -29,8 +34,9 @@ const toDateTimeLocal = (value) => {
 };
 
 export default function Leads() {
-  const { leads, agents, importLeads, refreshLeads, updateLead, assignLead, restoreLead } =
+  const { leads, agents, importLeads, refreshLeads, updateLead, assignLead, restoreLead, createManualLead, softDeleteLead } =
     useCrm();
+  const { user } = useAuth();
   const [params] = useSearchParams();
   const [f, setF] = useState({
     q: "",
@@ -47,6 +53,19 @@ export default function Leads() {
   const [saving, setSaving] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [restoringId, setRestoringId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+  const [showAddLead, setShowAddLead] = useState(false);
+  const [addingLead, setAddingLead] = useState(false);
+  const [newLead, setNewLead] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    state: "",
+    city: "",
+    propertyType: "",
+    agentId: "",
+    notes: "",
+  });
   const refreshInFlight = useRef(false);
   const fileRef = useRef();
   const editFormRef = useRef(null);
@@ -118,6 +137,50 @@ export default function Leads() {
     }
   };
 
+  const deleteLead = async (lead) => {
+    if (!window.confirm(`Delete ${lead.name}? The lead will move to the archive and can be restored.`)) return;
+    setDeletingId(lead.id);
+    setError("");
+    setSaved("");
+    try {
+      await softDeleteLead(lead.id);
+      setSaved(`${lead.name} moved to the archive.`);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setDeletingId("");
+    }
+  };
+
+  const addLead = async (event) => {
+    event.preventDefault();
+    setAddingLead(true);
+    setError("");
+    setSaved("");
+    try {
+      const lead = await createManualLead({
+        ...newLead,
+        agentId: newLead.agentId || null,
+      });
+      setSaved(`${lead.name} added to the lead pool.`);
+      setNewLead({
+        name: "",
+        phone: "",
+        email: "",
+        state: "",
+        city: "",
+        propertyType: "",
+        agentId: "",
+        notes: "",
+      });
+      setShowAddLead(false);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setAddingLead(false);
+    }
+  };
+
   const onCsv = async (e) => {
     const input = e.target;
     const file = input.files[0];
@@ -131,6 +194,37 @@ export default function Leads() {
       }
     }
     input.value = "";
+  };
+
+  const downloadLeads = () => {
+    downloadCsv(
+      `leads-${new Date().toISOString().slice(0, 10)}.csv`,
+      [
+        { key: "name", label: "Name" },
+        { key: "phone", label: "Phone" },
+        { key: "email", label: "Email" },
+        { key: "state", label: "State" },
+        { key: "city", label: "City" },
+        { key: "propertyType", label: "Property Type" },
+        { key: "source", label: "Source" },
+        { key: "status", label: "Status" },
+        { key: "score", label: "Score" },
+        { key: "followUp", label: "Follow-up" },
+        { key: "notes", label: "Notes" },
+        {
+          key: "agent",
+          label: "Assigned Agent",
+          value: (lead) =>
+            agents.find((agent) => agent.id === lead.agentId)?.name || "Unassigned",
+        },
+        {
+          key: "archived",
+          label: "Archived",
+          value: (lead) => (lead.deletedAt ? "Yes" : "No"),
+        },
+      ],
+      rows,
+    );
   };
 
   const saveEdit = async (event) => {
@@ -222,16 +316,28 @@ export default function Leads() {
           <ArchiveRestore size={14} /> {restoringId === r.id ? "Restoring…" : "Restore"}
         </button>
       ) : (
-        <button
-          type="button"
-          className="btn-outline !px-2.5 !py-1.5 text-xs"
-          onClick={() => {
-            setError("");
-            setEditing({ ...r, followUp: toDateTimeLocal(r.followUp) });
-          }}
-        >
-          <Pencil size={14} /> Edit
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn-outline !px-2.5 !py-1.5 text-xs"
+            onClick={() => {
+              setError("");
+              setEditing({ ...r, followUp: toDateTimeLocal(r.followUp) });
+            }}
+          >
+            <Pencil size={14} /> Edit
+          </button>
+          {user?.role === "admin" && (
+            <button
+              type="button"
+              className="btn-outline !border-rose-200 !px-2.5 !py-1.5 text-xs !text-rose-700 hover:!bg-rose-50"
+              disabled={deletingId === r.id}
+              onClick={() => deleteLead(r)}
+            >
+              <Trash2 size={14} /> {deletingId === r.id ? "Deleting…" : "Delete"}
+            </button>
+          )}
+        </div>
       ),
     },
   ];
@@ -258,10 +364,66 @@ export default function Leads() {
           <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />{" "}
           Refresh leads
         </button>
+        <button className="btn-outline" onClick={downloadLeads} disabled={!rows.length}>
+          <Download size={16} /> Download CSV
+        </button>
         <button className="btn-primary" onClick={() => fileRef.current.click()}>
           <Upload size={16} /> Upload CSV
         </button>
+        {user?.role === "admin" && (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setShowAddLead((open) => !open)}
+          >
+            {showAddLead ? <X size={16} /> : <Plus size={16} />}
+            {showAddLead ? "Cancel" : "Add Lead"}
+          </button>
+        )}
       </PageHeader>
+      {showAddLead && user?.role === "admin" && (
+        <form onSubmit={addLead} className="card mb-4">
+          <h2 className="section-title mb-4">Add a new lead</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="text-xs font-semibold text-slate-600">Name *
+              <input required maxLength={150} className="input mt-1" value={newLead.name} onChange={(event) => setNewLead((current) => ({ ...current, name: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Phone *
+              <input required type="tel" maxLength={40} className="input mt-1" value={newLead.phone} onChange={(event) => setNewLead((current) => ({ ...current, phone: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Email
+              <input type="email" maxLength={200} className="input mt-1" value={newLead.email} onChange={(event) => setNewLead((current) => ({ ...current, email: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">State
+              <select className="input mt-1" value={newLead.state} onChange={(event) => setNewLead((current) => ({ ...current, state: event.target.value, city: "" }))}>
+                <option value="">Select state</option>
+                {states.map((state) => <option key={state}>{state}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-600">City
+              <select className="input mt-1" value={newLead.city} disabled={!newLead.state} onChange={(event) => setNewLead((current) => ({ ...current, city: event.target.value }))}>
+                <option value="">Select city</option>
+                {(stateCities[newLead.state] || []).map((city) => <option key={city}>{city}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Assign to employee
+              <select className="input mt-1" value={newLead.agentId} onChange={(event) => setNewLead((current) => ({ ...current, agentId: event.target.value }))}>
+                <option value="">Leave unassigned</option>
+                {agents.filter((agent) => agent.active !== false).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-600">Property type
+              <input maxLength={200} className="input mt-1" value={newLead.propertyType} onChange={(event) => setNewLead((current) => ({ ...current, propertyType: event.target.value }))} />
+            </label>
+            <label className="text-xs font-semibold text-slate-600 sm:col-span-2">Notes
+              <textarea rows={2} maxLength={500} className="input mt-1 resize-y" value={newLead.notes} onChange={(event) => setNewLead((current) => ({ ...current, notes: event.target.value }))} />
+            </label>
+          </div>
+          <button type="submit" className="btn-primary mt-4" disabled={addingLead}>
+            {addingLead ? "Adding…" : "Add Lead"}
+          </button>
+        </form>
+      )}
       <div className="mb-4 flex flex-wrap gap-2">
         {["", ...LEAD_SOURCES].map((s) => (
           <button
