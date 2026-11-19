@@ -3,7 +3,7 @@ import { CheckCircle2, MapPin, Phone, CalendarDays } from 'lucide-react'
 import { Person } from '../components/Avatar'
 import { useCrm } from '../utils/CrmContext'
 import { useAuth } from '../utils/AuthContext'
-import { fmtDate } from '../utils/helpers'
+import { fmtDate, daysUntil } from '../utils/helpers'
 import { apiRequest } from '../utils/api'
 import PageHeader from '../components/PageHeader'
 import Badge from '../components/Badge'
@@ -30,12 +30,15 @@ export default function Technician() {
 
   const verify = async (id) => {
     try {
-      await apiRequest(`/api/maintenance/${id}/verify-otp`, {
+      const result = await apiRequest(`/api/maintenance/${id}/verify-otp`, {
         method: 'POST',
         token,
         body: JSON.stringify({ otp: input[id] || '' }),
       })
-      setMaintenanceLocal((p) => p.map((m) => (m.id === id ? { ...m, status: 'Completed' } : m)))
+      setMaintenanceLocal((p) => [
+        ...p.map((m) => (m.id === id ? { ...result.job, status: 'Completed' } : m)),
+        ...(result.nextJob && !p.some((m) => m.id === result.nextJob.id) ? [result.nextJob] : []),
+      ])
       setMsg((p) => ({ ...p, [id]: 'Verified. Admin notified.' }))
     } catch (error) {
       setMsg((p) => ({ ...p, [id]: error.message }))
@@ -61,6 +64,10 @@ export default function Technician() {
                     <p className="flex items-center gap-2"><MapPin size={14} className="text-slate-400" /> {inst?.address || customer?.address || 'No address recorded'}</p>
                     <p className="flex items-center gap-2"><Phone size={14} className="text-slate-400" /> {customer?.phone || inst?.phone}</p>
                     <p className="flex items-center gap-2"><CalendarDays size={14} className="text-slate-400" /> Due {fmtDate(m.dueDate)}</p>
+                    {m.status !== 'Completed' && m.type === 'AMC' && daysUntil(m.dueDate) >= 0 && daysUntil(m.dueDate) <= 10 &&
+                      <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                        {daysUntil(m.dueDate) === 0 ? 'Maintenance due today' : `Reminder: maintenance due in ${daysUntil(m.dueDate)} days`}
+                      </p>}
                   </div>
                 </div>
                 <Badge>{m.status}</Badge>

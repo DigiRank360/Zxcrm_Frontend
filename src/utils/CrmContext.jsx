@@ -18,6 +18,7 @@ export function CrmProvider({ children }) {
   const [agents, setAgents] = useState([])
   const [visits, setVisits] = useState([])
   const [holidays, setHolidays] = useState([])
+  const [leaveRequests, setLeaveRequests] = useState([])
   const [loadedToken, setLoadedToken] = useState('')
   const [error, setError] = useState('')
   const stateRef = useRef({
@@ -27,6 +28,7 @@ export function CrmProvider({ children }) {
     maintenance: [],
     applications: [],
     customers: [],
+    leaveRequests: [],
   })
   const writeQueues = useRef({})
   const loading = Boolean(user && token && loadedToken !== token)
@@ -48,6 +50,7 @@ export function CrmProvider({ children }) {
         setAgents(data.agents || (data.users || []).filter((item) => item.role === 'employee' && item.active !== false))
         setVisits(data.visits || [])
         setHolidays(data.holidays || [])
+        setLeaveRequests(data.leaveRequests || [])
         stateRef.current = { ...stateRef.current, applications: data.applications || [] }
         setError('')
       })
@@ -85,7 +88,7 @@ export function CrmProvider({ children }) {
   useEffect(() => {
     if (!user || user.role !== 'employee' || !token) return undefined
 
-    const cutoff = new Date(`${istDate()}T20:30:00+05:30`)
+    const cutoff = new Date(`${istDate()}T20:00:00+05:30`)
     const cutoffAt = cutoff.getTime()
     const timer = window.setTimeout(() => {
       const today = istDate(cutoff)
@@ -341,9 +344,7 @@ export function CrmProvider({ children }) {
 
   const softDeleteLead = async (id) => {
     const result = await apiRequest(`/api/leads/${id}`, { method: 'DELETE', token })
-    const nextLeads = user?.role === 'admin'
-      ? stateRef.current.leads.map((lead) => lead.id === id ? result.lead : lead)
-      : stateRef.current.leads.filter((lead) => lead.id !== id)
+    const nextLeads = stateRef.current.leads.filter((lead) => lead.id !== id)
     stateRef.current = { ...stateRef.current, leads: nextLeads }
     setLeadsState(nextLeads)
     return result.lead
@@ -383,7 +384,7 @@ export function CrmProvider({ children }) {
     applications, addApplication, completeApplicationStep, decideApplicationApproval, updateApplicationCommercial,
     uploadApplicationOcr, uploadApplicationStepDocument, transferApplication, assignInstallation, customers,
     users, addUser, updateAgentRouting, updateUserProfile, softDeleteUser, restoreUser,
-    visits, addVisit, uploadPhoto, holidays, addHoliday, removeHoliday,
+    visits, addVisit, uploadPhoto, holidays, addHoliday, removeHoliday, leaveRequests,
     autoAssignLeads, assignLead, transferLeadLocation, updateLead, softDeleteLead, restoreLead, importLeads, createManualLead, refreshLeads, loading, error,
   }
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>

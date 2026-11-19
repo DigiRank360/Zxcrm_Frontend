@@ -40,6 +40,8 @@ const localDate = (d) =>
 
 // Order: overdue follow-ups, due today, never-called leads, later follow-ups, everything else
 function classify(lead, now) {
+  if (lead.status === "Converted")
+    return { key: "converted", label: "Converted", rank: 6 };
   if (lead.status === "Not Interested")
     return { key: "not_interested", label: "Not Interested", rank: 5 };
   const due = lead.followUp ? new Date(lead.followUp) : null;
@@ -63,6 +65,7 @@ function classify(lead, now) {
 
 const tabs = [
   { key: "interested", label: "Interested" },
+  { key: "converted", label: "Converted" },
   { key: "pending", label: "Pending" },
   { key: "overdue", label: "Overdue" },
   { key: "today", label: "Due today" },
@@ -79,6 +82,7 @@ const accent = {
   scheduled: "border-l-slate-300",
   open: "border-l-slate-200",
   interested: "border-l-emerald-400",
+  converted: "border-l-green-500",
   not_interested: "border-l-rose-400",
 };
 const tone = {
@@ -88,6 +92,7 @@ const tone = {
   scheduled: "bg-slate-100 text-slate-600",
   open: "bg-slate-100 text-slate-600",
   interested: "bg-emerald-50 text-emerald-700",
+  converted: "bg-green-50 text-green-700",
   not_interested: "bg-rose-50 text-rose-700",
 };
 
@@ -141,7 +146,7 @@ export default function AgentCalling() {
     return leads
       .filter(
         (l) =>
-          l.agentId === user.id && l.status !== "Converted" && !l.deletedAt,
+        l.agentId === user.id && !l.deletedAt,
       )
       .map((l) => ({ lead: l, group: classify(l, now) }))
       .sort(
@@ -157,11 +162,15 @@ export default function AgentCalling() {
   const interestedCount = queue.filter(
     ({ lead }) => lead.status === "Interested",
   ).length;
+  const convertedCount = queue.filter(
+    ({ lead }) => lead.status === "Converted",
+  ).length;
   const pendingCount = count("overdue") + count("today") + count("new");
   const visible = queue.filter(
     ({ lead, group }) =>
       tab === "all" ||
       (tab === "interested" && lead.status === "Interested") ||
+      (tab === "converted" && lead.status === "Converted") ||
       (tab === "pending"
         ? ["overdue", "today", "new"].includes(group.key)
         : group.key === tab),
@@ -245,7 +254,7 @@ export default function AgentCalling() {
   const removeLead = async (lead) => {
     if (
       !window.confirm(
-        `Move ${lead.name} to the archive? It can be restored by an administrator.`,
+        `Permanently delete ${lead.name}? This action cannot be undone.`,
       )
     )
       return;
@@ -254,7 +263,7 @@ export default function AgentCalling() {
     setSaved("");
     try {
       await softDeleteLead(lead.id);
-      setSaved(`${lead.name} moved to the archive.`);
+      setSaved(`${lead.name} permanently deleted.`);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -532,6 +541,8 @@ export default function AgentCalling() {
               ? queue.length
               : t.key === "interested"
                 ? interestedCount
+                : t.key === "converted"
+                  ? convertedCount
                 : t.key === "pending"
                   ? pendingCount
                   : count(t.key)}
@@ -743,6 +754,22 @@ export default function AgentCalling() {
                 )}
               </div>
               <div className="mt-auto border-t border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+                {l.status === "Converted" ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-green-700">
+                      This lead has been converted.
+                    </p>
+                    {l.customerId && (
+                      <Link
+                        to={`/customers?customer=${l.customerId}`}
+                        className="btn-outline !px-3 !py-1.5 text-xs"
+                      >
+                        <UserRound size={14} /> View customer
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Log call
                 </p>
@@ -868,6 +895,8 @@ export default function AgentCalling() {
                       : "Transfer lead"}
                   </button>
                 </div>
+                  </>
+                )}
               </div>
             </article>
           ),

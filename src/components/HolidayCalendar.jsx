@@ -7,10 +7,10 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const pad = (n) => String(n).padStart(2, '0')
 
 // attendanceByDate: { 'YYYY-MM-DD': status } for the signed-in employee (omit for admin/hr views)
-export default function HolidayCalendar({ canManage, attendanceByDate }) {
+export default function HolidayCalendar({ canManage, attendanceByDate, initialMonth, onMonthChange }) {
   const { holidays, addHoliday, removeHoliday } = useCrm()
   const today = istDate()
-  const [cursor, setCursor] = useState(today.slice(0, 7))
+  const [cursor, setCursor] = useState(initialMonth || today.slice(0, 7))
   const [form, setForm] = useState({ date: '', name: '' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -25,7 +25,9 @@ export default function HolidayCalendar({ canManage, attendanceByDate }) {
 
   const shift = (delta) => {
     const next = new Date(Date.UTC(year, month - 1 + delta, 1))
-    setCursor(`${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}`)
+    const nextMonth = `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}`
+    setCursor(nextMonth)
+    onMonthChange?.(nextMonth)
   }
 
   const submit = async (event) => {

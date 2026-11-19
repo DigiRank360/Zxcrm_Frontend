@@ -17,6 +17,10 @@ export default function Maintenance() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const rows = [...maintenance].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  const reminderRows = rows.filter((row) => row.status !== 'Completed' &&
+    row.type === 'AMC' &&
+    daysUntil(row.dueDate) >= 0 &&
+    daysUntil(row.dueDate) <= 10)
 
   const assign = async (id, workerId) => {
     try { await assignTicket(id, workerId) } catch (requestError) { setError(requestError.message) }
@@ -46,7 +50,13 @@ export default function Maintenance() {
       </div>
     } },
     { key: 'priority', label: 'Priority', render: (r) => <Badge>{r.priority || 'Normal'}</Badge> },
-    { key: 'dueDate', label: 'Due date', render: (r) => fmtDate(r.dueDate) },
+    { key: 'dueDate', label: 'Due date', render: (r) => (
+      <div>
+        <p className="font-semibold text-slate-800">{fmtDate(r.dueDate)}</p>
+        {r.status !== 'Completed' && r.type === 'AMC' && daysUntil(r.dueDate) >= 0 && daysUntil(r.dueDate) <= 10 &&
+          <p className="mt-1 text-[11px] font-bold text-amber-700">{daysUntil(r.dueDate) === 0 ? 'Due today' : `Due in ${daysUntil(r.dueDate)} days`}</p>}
+      </div>
+    ) },
     {
       key: 'worker', label: 'Technician',
       render: (r) => !canManage ? (workers.find((w) => w.id === r.workerId)?.name || 'Unassigned') : (
@@ -63,6 +73,11 @@ export default function Maintenance() {
     <>
       <PageHeader eyebrow="Service operations" title="Maintenance & service tickets" subtitle={canManage ? "Create and assign tickets for installed customers; technicians close work with customer OTP." : "Read-only overview of service tickets handled by employees."} />
       {!canManage && <p className="mb-5 rounded-lg bg-sky-50 p-3 text-sm text-sky-800">Read-only view. Maintenance tickets are created and assigned by employees.</p>}
+      {reminderRows.length > 0 && (
+        <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <b>{reminderRows.length} upcoming AMC visit{reminderRows.length === 1 ? '' : 's'}</b> is within the next 10 days. Customer SMS reminders are sent through Twilio.
+        </div>
+      )}
       {canManage && <form onSubmit={submit} className="card mb-5">
         <h2 className="section-title flex items-center gap-2"><Plus size={18} /> Create service ticket</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

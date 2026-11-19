@@ -6,7 +6,7 @@ import useNow from '../utils/useNow'
 
 const SHIFT_SEC = 8 * 3600
 const WORK_START_MINUTES = 10 * 60
-const WORK_END_MINUTES = 20 * 60 + 30
+const WORK_END_MINUTES = 20 * 60
 
 const isWorkingHours = (date) => {
   const [hours, minutes] = istTime(date).split(':').map(Number)
@@ -37,7 +37,7 @@ export default function WorkTimerCard({ employee, userId }) {
   const update = (patch) => setAttendance((p) => p.map((a) => (a.id === me?.id ? { ...a, ...patch } : a)))
   const checkIn = async () => {
     if (!isWorkingHours(new Date())) {
-      setError('Check-in is available only from 10:00 AM to 8:30 PM IST.')
+      setError('Check-in is available only from 10:00 AM to 8:00 PM IST.')
       return
     }
     setSaving(true)
@@ -67,7 +67,7 @@ export default function WorkTimerCard({ employee, userId }) {
   const checkOut = () => {
     const now = new Date()
     if (!isWorkingHours(now)) {
-      setError('Check-out is available only from 10:00 AM to 8:30 PM IST.')
+      setError('Check-out is available only from 10:00 AM to 8:00 PM IST.')
       return
     }
     update({ checkOut: istTime(now), checkOutAt: now.toISOString() })
@@ -95,7 +95,7 @@ export default function WorkTimerCard({ employee, userId }) {
           <p className="mt-1 text-sm text-slate-500">
             {me?.checkIn ? <>Last session: checked in at <b className="text-slate-700">{me.checkIn}</b>{me.checkOut && <> · checked out at <b className="text-slate-700">{me.checkOut}</b></>}</> : 'Start your day to begin tracking work hours'}
           </p>
-          <p className="mt-1 text-xs text-slate-500">Check-in and check-out available 10:00 AM–8:30 PM IST.</p>
+          <p className="mt-1 text-xs text-slate-500">Check-in and check-out available 10:00 AM–8:00 PM IST. Open sessions are checked out automatically at 8:00 PM IST.</p>
           <div className="mt-4 max-w-md">
             <div className="mb-1 flex justify-between text-[11px] font-semibold text-slate-400"><span>Shift progress</span><span>{pct.toFixed(0)}% of 8h</span></div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">

@@ -370,6 +370,7 @@ export default function HrPanel() {
   const [payrollMonthFilter, setPayrollMonthFilter] = useState('')
   const [payrollPreview, setPayrollPreview] = useState(null)
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
+  const [leaveRequests, setLeaveRequests] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -379,10 +380,12 @@ export default function HrPanel() {
     Promise.all([
       apiRequest('/api/hr/employees', { token }),
       apiRequest('/api/hr/payroll', { token }),
-    ]).then(([employeeRows, payrollRows]) => {
+      apiRequest('/api/hr/leaves', { token }),
+    ]).then(([employeeRows, payrollRows, leaveRows]) => {
       if (!active) return
       setEmployees(employeeRows)
       setPayroll(payrollRows)
+      setLeaveRequests(leaveRows)
       setForm((current) => ({
         ...current,
         employeeId: current.employeeId || employeeRows.find((employee) => employee.active !== false && employee.monthlySalary !== undefined)?.id || '',
@@ -459,6 +462,20 @@ export default function HrPanel() {
 
   }
 
+  const reviewLeave = async (id, decision) => {
+    setError('')
+    try {
+      const updated = await apiRequest(`/api/hr/leaves/${id}/review`, {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify({ decision, note: '' }),
+      })
+      setLeaveRequests((current) => current.map((leave) => leave.id === id ? updated : leave))
+    } catch (requestError) {
+      setError(requestError.message)
+    }
+  }
+
   const downloadPayrollSlip = async (record) => {
     setError('')
     try {
@@ -524,6 +541,37 @@ export default function HrPanel() {
         <StatCard label="Payroll records" value={payroll.length} icon={Banknote} />
         <StatCard label="Pending payments" value={pending.length} icon={Banknote} tone="amber" />
       </div>
+
+      <section className="card mb-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="section-title">Leave requests</h2>
+            <p className="text-xs text-slate-500">Approve or reject employee leave requests.</p>
+          </div>
+          <Badge>{leaveRequests.filter((leave) => leave.status === 'Pending').length} Pending</Badge>
+        </div>
+        {leaveRequests.length ? (
+          <div className="space-y-3">
+            {leaveRequests.map((leave) => (
+              <div key={leave.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-900">{leave.employeeName}</p>
+                  <p className="text-sm text-slate-600">{leave.leaveType}: {leave.fromDate} to {leave.toDate}</p>
+                  {leave.reason && <p className="mt-1 text-xs text-slate-500">{leave.reason}</p>}
+                </div>
+                {leave.status === 'Pending' ? (
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-outline !border-rose-200 !text-rose-700" onClick={() => reviewLeave(leave.id, 'Rejected')}>Reject</button>
+                    <button type="button" className="btn-primary" onClick={() => reviewLeave(leave.id, 'Approved')}>Approve</button>
+                  </div>
+                ) : <Badge>{leave.status}</Badge>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="py-5 text-center text-sm text-slate-500">No leave requests.</p>
+        )}
+      </section>
 
       <section className="mb-6">
         <div className="mb-3 flex items-end justify-between gap-3">

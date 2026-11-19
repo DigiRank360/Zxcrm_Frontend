@@ -7,7 +7,6 @@ import {
   RefreshCw,
   X,
   ArrowRightLeft,
-  ArchiveRestore,
   Download,
   Plus,
   Trash2,
@@ -34,7 +33,7 @@ const toDateTimeLocal = (value) => {
 };
 
 export default function Leads() {
-  const { leads, agents, importLeads, refreshLeads, updateLead, assignLead, restoreLead, createManualLead, softDeleteLead } =
+  const { leads, agents, importLeads, refreshLeads, updateLead, assignLead, createManualLead, softDeleteLead } =
     useCrm();
   const { user } = useAuth();
   const [params] = useSearchParams();
@@ -52,8 +51,8 @@ export default function Leads() {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [transferring, setTransferring] = useState(false);
-  const [restoringId, setRestoringId] = useState("");
   const [deletingId, setDeletingId] = useState("");
+  const [selectedLead, setSelectedLead] = useState(null);
   const [showAddLead, setShowAddLead] = useState(false);
   const [addingLead, setAddingLead] = useState(false);
   const [newLead, setNewLead] = useState({
@@ -123,28 +122,14 @@ export default function Leads() {
       (!f.archived || (f.archived === "archived" ? Boolean(l.deletedAt) : !l.deletedAt)),
   );
 
-  const onRestore = async (lead) => {
-    setRestoringId(lead.id);
-    setError("");
-    setSaved("");
-    try {
-      await restoreLead(lead.id);
-      setSaved(`${lead.name} restored.`);
-    } catch (requestError) {
-      setError(requestError.message);
-    } finally {
-      setRestoringId("");
-    }
-  };
-
   const deleteLead = async (lead) => {
-    if (!window.confirm(`Delete ${lead.name}? The lead will move to the archive and can be restored.`)) return;
+    if (!window.confirm(`Permanently delete ${lead.name}? This action cannot be undone.`)) return;
     setDeletingId(lead.id);
     setError("");
     setSaved("");
     try {
       await softDeleteLead(lead.id);
-      setSaved(`${lead.name} moved to the archive.`);
+      setSaved(`${lead.name} permanently deleted.`);
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -217,11 +202,6 @@ export default function Leads() {
           value: (lead) =>
             agents.find((agent) => agent.id === lead.agentId)?.name || "Unassigned",
         },
-        {
-          key: "archived",
-          label: "Archived",
-          value: (lead) => (lead.deletedAt ? "Yes" : "No"),
-        },
       ],
       rows,
     );
@@ -272,7 +252,11 @@ export default function Leads() {
     {
       key: "name",
       label: "Name",
-      render: (r) => <Person name={r.name} sub={r.phone} />,
+      render: (r) => (
+        <button type="button" onClick={() => setSelectedLead(r)} className="rounded-lg text-left hover:bg-brand-50">
+          <Person name={r.name} sub={r.phone} />
+        </button>
+      ),
     },
     {
       key: "source",
@@ -289,10 +273,14 @@ export default function Leads() {
       key: "status",
       label: "Status",
       render: (r) => (
-        <div className="flex flex-col items-start gap-1">
+        <button
+          type="button"
+          onClick={() => setSelectedLead(r)}
+          className="inline-flex items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          title={`View ${r.name} status details`}
+        >
           <Badge>{r.status}</Badge>
-          {r.deletedAt && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Archived</span>}
-        </div>
+        </button>
       ),
     },
     {
@@ -306,16 +294,7 @@ export default function Leads() {
     {
       key: "actions",
       label: "Actions",
-      render: (r) => r.deletedAt ? (
-        <button
-          type="button"
-          className="btn-outline !px-2.5 !py-1.5 text-xs"
-          disabled={restoringId === r.id}
-          onClick={() => onRestore(r)}
-        >
-          <ArchiveRestore size={14} /> {restoringId === r.id ? "Restoring…" : "Restore"}
-        </button>
-      ) : (
+      render: (r) => (
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -476,11 +455,6 @@ export default function Leads() {
           value={f.date}
           onChange={set("date")}
         />
-        <select className="input" aria-label="Lead archive filter" value={f.archived} onChange={set("archived")}>
-          <option value="">Active + archived</option>
-          <option value="active">Active leads</option>
-          <option value="archived">Archived leads</option>
-        </select>
       </div>
       {error && (
         <p
@@ -617,6 +591,29 @@ export default function Leads() {
         </div>
       )}
       <DataTable columns={columns} rows={rows} />
+      {selectedLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Lead status details" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSelectedLead(null)
+        }}>
+          <div className="w-full max-w-lg rounded-2xl border border-white/70 bg-white p-5 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-600">Lead status</p>
+                <h2 className="mt-1 text-xl font-bold text-slate-900">{selectedLead.name}</h2>
+              </div>
+              <button type="button" aria-label="Close status details" onClick={() => setSelectedLead(null)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Status</p><div className="mt-2"><Badge>{selectedLead.status}</Badge></div></div>
+              <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Assigned agent</p><p className="mt-2 text-sm font-semibold text-slate-800">{agents.find((agent) => agent.id === selectedLead.agentId)?.name || 'Unassigned'}</p></div>
+              <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Phone</p><p className="mt-2 text-sm font-semibold text-slate-800">{selectedLead.phone || '—'}</p></div>
+              <div className="rounded-xl bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Follow-up</p><p className="mt-2 text-sm font-semibold text-slate-800">{selectedLead.followUp ? fmtDate(selectedLead.followUp) : 'Not scheduled'}</p></div>
+            </div>
+            {selectedLead.notes && <div className="mt-3 rounded-xl border border-slate-100 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Notes</p><p className="mt-1 text-sm text-slate-700">{selectedLead.notes}</p></div>}
+            {selectedLead.assignmentReason && <div className="mt-3 rounded-xl border border-slate-100 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Routing reason</p><p className="mt-1 text-sm text-slate-700">{selectedLead.assignmentReason}</p></div>}
+          </div>
+        </div>
+      )}
       <p className="mt-2 text-xs text-slate-400">
         CSV columns: name, phone, email, state, city, propertyType, score. Leads
         are routed against employee availability and capacity.
