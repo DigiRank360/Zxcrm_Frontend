@@ -1,23 +1,24 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { CrmProvider } from './utils/CrmContext'
 import { AuthProvider, useAuth } from './utils/AuthContext'
 import Layout from './components/Layout'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import EmployeeDashboard from './pages/EmployeeDashboard'
-import Attendance from './pages/Attendance'
-import Leads from './pages/Leads'
-import LeadSources from './pages/LeadSources'
-import Assignment from './pages/Assignment'
-import AgentCalling from './pages/AgentCalling'
-import Installations from './pages/Installations'
-import Maintenance from './pages/Maintenance'
-import Technician from './pages/Technician'
-import Team from './pages/Team'
-import Customers from './pages/Customers'
-import HrPanel from './pages/HrPanel'
-import Visits from './pages/Visits'
-import MyProfile from './pages/MyProfile'
+const Login = lazy(() => import('./pages/Login'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const EmployeeDashboard = lazy(() => import('./pages/EmployeeDashboard'))
+const Attendance = lazy(() => import('./pages/Attendance'))
+const Leads = lazy(() => import('./pages/Leads'))
+const LeadSources = lazy(() => import('./pages/LeadSources'))
+const Assignment = lazy(() => import('./pages/Assignment'))
+const AgentCalling = lazy(() => import('./pages/AgentCalling'))
+const Installations = lazy(() => import('./pages/Installations'))
+const Maintenance = lazy(() => import('./pages/Maintenance'))
+const Technician = lazy(() => import('./pages/Technician'))
+const Team = lazy(() => import('./pages/Team'))
+const Customers = lazy(() => import('./pages/Customers'))
+const HrPanel = lazy(() => import('./pages/HrPanel'))
+const Visits = lazy(() => import('./pages/Visits'))
+const MyProfile = lazy(() => import('./pages/MyProfile'))
 
 const home = { admin: Dashboard, hr: HrPanel, employee: EmployeeDashboard, technician: Technician }
 
@@ -58,7 +59,9 @@ export default function App() {
     <AuthProvider>
       <CrmProvider>
         <BrowserRouter>
-          <AppRoutes />
+          <Suspense fallback={<div role="status" className="p-6 text-slate-500">Loading page...</div>}>
+            <AppRoutes />
+          </Suspense>
         </BrowserRouter>
       </CrmProvider>
     </AuthProvider>

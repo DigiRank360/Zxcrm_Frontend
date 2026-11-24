@@ -75,13 +75,23 @@ export function CrmProvider({ children }) {
     setError('')
   }, [token])
 
-  const refreshLeads = useCallback(async () => {
+  const refreshLeadSnapshot = useCallback(async () => {
     const data = await apiRequest('/api/crm', { token })
     const currentLeads = data.leads || []
     stateRef.current = { ...stateRef.current, leads: currentLeads }
     setLeadsState(currentLeads)
-    return currentLeads
+    return data
   }, [token])
+
+  const refreshLeads = useCallback(async () => {
+    const data = await refreshLeadSnapshot()
+    return data.leads || []
+  }, [refreshLeadSnapshot])
+
+  const refreshEmployeeDashboard = useCallback(async () => {
+    const data = await refreshLeadSnapshot()
+    return data.leaveRequests || []
+  }, [refreshLeadSnapshot])
 
   const setLeads = (update) => updateResource('leads', setLeadsState, update)
   const setAttendance = useCallback((update) => updateResource('attendance', setAttendanceState, update), [updateResource])
@@ -385,7 +395,7 @@ export function CrmProvider({ children }) {
     uploadApplicationOcr, uploadApplicationStepDocument, transferApplication, assignInstallation, customers,
     users, addUser, updateAgentRouting, updateUserProfile, softDeleteUser, restoreUser,
     visits, addVisit, uploadPhoto, holidays, addHoliday, removeHoliday, leaveRequests,
-    autoAssignLeads, assignLead, transferLeadLocation, updateLead, softDeleteLead, restoreLead, importLeads, createManualLead, refreshLeads, loading, error,
+    autoAssignLeads, assignLead, transferLeadLocation, updateLead, softDeleteLead, restoreLead, importLeads, createManualLead, refreshLeads, refreshEmployeeDashboard, loading, error,
   }
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>
 }

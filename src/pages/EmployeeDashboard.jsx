@@ -82,7 +82,7 @@ export default function EmployeeDashboard() {
     applications,
     holidays,
     leaveRequests,
-    refreshLeads,
+    refreshEmployeeDashboard,
   } = useCrm();
   const [refreshError, setRefreshError] = useState("");
   const [leaveForm, setLeaveForm] = useState({
@@ -95,32 +95,35 @@ export default function EmployeeDashboard() {
   const [leaveError, setLeaveError] = useState("");
   const [leaveRows, setLeaveRows] = useState(leaveRequests);
 
-  useEffect(() => {
-    if (!token) return undefined;
-    const refreshLeaves = () => {
-      apiRequest("/api/crm", { token })
-        .then((data) => setLeaveRows(data.leaveRequests || []))
-        .catch(() => {});
-    };
-    refreshLeaves();
-    const timer = window.setInterval(refreshLeaves, 20000);
-    return () => window.clearInterval(timer);
-  }, [token]);
   const now = useNow();
   const todayDate = istDate();
 
   useEffect(() => {
+    if (!token) return undefined;
+    let active = true;
+    let inFlight = false;
     const refresh = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        await refreshLeads();
-        setRefreshError("");
+        const leaves = await refreshEmployeeDashboard();
+        if (active) {
+          setLeaveRows(leaves);
+          setRefreshError("");
+        }
       } catch (error) {
-        setRefreshError(error.message);
+        if (active) setRefreshError(error.message);
+      } finally {
+        inFlight = false;
       }
     };
+    void refresh();
     const timer = window.setInterval(refresh, 20000);
-    return () => window.clearInterval(timer);
-  }, [refreshLeads]);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [refreshEmployeeDashboard, token]);
 
   const { mine, open, overdue, dueToday, upcoming } = useMemo(() => {
     const own = leads.filter((l) => l.agentId === user.id);
@@ -263,7 +266,7 @@ export default function EmployeeDashboard() {
           role="alert"
           className="mb-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700"
         >
-          Could not refresh assigned leads: {refreshError}
+          Could not refresh assigned leads and leave requests: {refreshError}
         </p>
       )}
 
