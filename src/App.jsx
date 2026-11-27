@@ -57,13 +57,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <CrmProvider>
-        <BrowserRouter>
+      <BrowserRouter>
+        <CrmProvider>
           <Suspense fallback={<div role="status" className="p-6 text-slate-500">Loading page...</div>}>
             <AppRoutes />
           </Suspense>
-        </BrowserRouter>
-      </CrmProvider>
+        </CrmProvider>
+      </BrowserRouter>
     </AuthProvider>
   )
 }

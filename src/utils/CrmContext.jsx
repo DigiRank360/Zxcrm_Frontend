@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { apiRequest } from './api'
 import { useAuth } from './AuthContext'
 import { istDate, istTime } from './helpers'
@@ -6,8 +7,30 @@ import { documentToDataUrl, fileToDataUrl } from './uploads'
 
 const CrmContext = createContext(null)
 
+const viewResources = {
+  leads: ['leads'],
+  calling: ['leads', 'attendance'],
+  attendance: ['attendance', 'holidays'],
+  installations: ['applications', 'installations'],
+  maintenance: ['leads', 'applications', 'installations', 'maintenance', 'customers'],
+  visits: ['visits'],
+  team: [],
+  'employee-dashboard': ['leads', 'attendance', 'applications', 'holidays', 'leaveRequests'],
+}
+
+function routeView(path, role) {
+  path = path.replace(/\/+$/, '').toLowerCase() || '/'
+  if (path === '/') return { admin: 'summary', employee: 'employee-dashboard', technician: 'maintenance' }[role]
+  return {
+    '/leads': 'leads', '/assignment': 'leads', '/sources': 'leads',
+    '/my-calls': 'calling', '/attendance': 'attendance', '/installations': 'installations',
+    '/maintenance': 'maintenance', '/visits': 'visits', '/team': 'team',
+  }[path]
+}
+
 export function CrmProvider({ children }) {
   const { user, token, logout } = useAuth()
+  const { pathname } = useLocation()
   const [leads, setLeadsState] = useState([])
   const [attendance, setAttendanceState] = useState([])
   const [installations, setInstallationsState] = useState([])
@@ -19,7 +42,9 @@ export function CrmProvider({ children }) {
   const [visits, setVisits] = useState([])
   const [holidays, setHolidays] = useState([])
   const [leaveRequests, setLeaveRequests] = useState([])
-  const [loadedToken, setLoadedToken] = useState('')
+  const [summary, setSummary] = useState(null)
+  const [loadedView, setLoadedView] = useState('')
+  const [failedView, setFailedView] = useState('')
   const [error, setError] = useState('')
   const stateRef = useRef({
     leads: [],
@@ -31,33 +56,48 @@ export function CrmProvider({ children }) {
     leaveRequests: [],
   })
   const writeQueues = useRef({})
-  const loading = Boolean(user && token && loadedToken !== token)
+  const userId = user?.id
+  const userRole = user?.role
+  const view = routeView(pathname, userRole)
+  const viewKey = view && userId && token ? `${token}:${userId}:${userRole}:${view}` : ''
+  const loading = Boolean(viewKey && loadedView !== viewKey)
+  const loadFailed = Boolean(viewKey && failedView === viewKey)
 
   useEffect(() => {
-    if (!user || !token) return
+    if (!viewKey) return undefined
     let active = true
-    apiRequest('/api/crm', { token })
+    const endpoint = view === 'summary' ? '/api/crm/summary' : `/api/crm/views/${view}`
+    Promise.allSettled(Object.values(writeQueues.current))
+      .then(() => apiRequest(endpoint, { token }))
       .then((data) => {
         if (!active) return
-        stateRef.current = data
-        setLeadsState(data.leads)
-        setAttendanceState(data.attendance)
-        setInstallationsState(data.installations)
-        setMaintenanceState(data.maintenance)
-        setApplicationsState(data.applications || [])
-        setCustomers(data.customers || [])
-        setUsers(data.users || [])
-        setAgents(data.agents || (data.users || []).filter((item) => item.role === 'employee' && item.active !== false))
-        setVisits(data.visits || [])
-        setHolidays(data.holidays || [])
-        setLeaveRequests(data.leaveRequests || [])
-        stateRef.current = { ...stateRef.current, applications: data.applications || [] }
+        if (view === 'summary') {
+          setSummary(data)
+        } else {
+          const setters = {
+            leads: setLeadsState, attendance: setAttendanceState, installations: setInstallationsState,
+            maintenance: setMaintenanceState, applications: setApplicationsState, customers: setCustomers,
+            visits: setVisits, holidays: setHolidays, leaveRequests: setLeaveRequests,
+          }
+          for (const resource of viewResources[view]) {
+            setters[resource](data[resource])
+            stateRef.current = { ...stateRef.current, [resource]: data[resource] }
+          }
+          setUsers(data.users || [])
+          setAgents(data.agents || [])
+        }
         setError('')
+        setFailedView('')
       })
-      .catch((err) => { if (active) setError(err.message) })
-      .finally(() => { if (active) setLoadedToken(token) })
+      .catch((err) => {
+        if (active) {
+          setError(err.message)
+          setFailedView(viewKey)
+        }
+      })
+      .finally(() => { if (active) setLoadedView(viewKey) })
     return () => { active = false }
-  }, [user, token])
+  }, [viewKey, view, token])
 
   const updateResource = useCallback((resource, setState, update) => {
     const current = stateRef.current[resource]
@@ -76,12 +116,13 @@ export function CrmProvider({ children }) {
   }, [token])
 
   const refreshLeadSnapshot = useCallback(async () => {
-    const data = await apiRequest('/api/crm', { token })
+    const view = userRole === 'employee' ? 'lead-refresh' : 'leads'
+    const data = await apiRequest(`/api/crm/views/${view}`, { token })
     const currentLeads = data.leads || []
     stateRef.current = { ...stateRef.current, leads: currentLeads }
     setLeadsState(currentLeads)
     return data
-  }, [token])
+  }, [token, userRole])
 
   const refreshLeads = useCallback(async () => {
     const data = await refreshLeadSnapshot()
@@ -395,7 +436,7 @@ export function CrmProvider({ children }) {
     uploadApplicationOcr, uploadApplicationStepDocument, transferApplication, assignInstallation, customers,
     users, addUser, updateAgentRouting, updateUserProfile, softDeleteUser, restoreUser,
     visits, addVisit, uploadPhoto, holidays, addHoliday, removeHoliday, leaveRequests,
-    autoAssignLeads, assignLead, transferLeadLocation, updateLead, softDeleteLead, restoreLead, importLeads, createManualLead, refreshLeads, refreshEmployeeDashboard, loading, error,
+    autoAssignLeads, assignLead, transferLeadLocation, updateLead, softDeleteLead, restoreLead, importLeads, createManualLead, refreshLeads, refreshEmployeeDashboard, summary, loading, loadFailed, error,
   }
   return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>
 }

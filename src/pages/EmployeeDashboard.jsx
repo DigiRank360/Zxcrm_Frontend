@@ -117,7 +117,6 @@ export default function EmployeeDashboard() {
         inFlight = false;
       }
     };
-    void refresh();
     const timer = window.setInterval(refresh, 20000);
     return () => {
       active = false;

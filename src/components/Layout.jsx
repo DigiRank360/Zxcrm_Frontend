@@ -96,7 +96,7 @@ function SidebarContent({ links, user, logout, onClose }) {
 
 export default function Layout() {
   const { user, logout } = useAuth()
-  const { error, loading } = useCrm()
+  const { error, loading, loadFailed } = useCrm()
   const links = linksByRole[user.role]
   const [now, setNow] = useState(() => new Date())
   const [menuOpen, setMenuOpen] = useState(false)
@@ -172,7 +172,7 @@ export default function Layout() {
         </header>
         <main className="mx-auto w-full max-w-7xl flex-1 p-3 sm:p-4 lg:p-8">
           {error && <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{error}</div>}
-          {loading ? <div className="card text-sm text-slate-500">Loading your CRM data…</div> : <Outlet />}
+          {loading ? <div className="card text-sm text-slate-500">Loading your CRM data…</div> : !loadFailed && <Outlet />}
         </main>
       </div>
     </div>

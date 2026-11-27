@@ -92,7 +92,6 @@ export default function Leads() {
         setRefreshing(false);
       }
     };
-    void refresh();
     const timer = window.setInterval(refresh, 20000);
     return () => window.clearInterval(timer);
   }, [refreshLeads]);
